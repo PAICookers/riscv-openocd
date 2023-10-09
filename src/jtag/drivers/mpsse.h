@@ -33,6 +33,12 @@ enum ftdi_chip_type {
 	TYPE_FT4232HA,
 };
 
+enum mpsse_backend_type {
+	MPSSE_BACKEND_TYPE_UNKNOWN,
+	MPSSE_BACKEND_TYPE_LIBUSB,
+	MPSSE_BACKEND_TYPE_FTD2XX,
+};
+
 struct mpsse_ctx;
 
 /* Device handling */
