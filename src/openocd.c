@@ -107,9 +107,15 @@ COMMAND_HANDLER(handle_noinit_command)
 /* OpenOCD can't really handle failure of this command. Patches welcome! :-) */
 COMMAND_HANDLER(handle_init_command)
 {
+	bool resethalt = false;
 
-	if (CMD_ARGC != 0)
+	if (CMD_ARGC > 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	if (CMD_ARGC == 1) {
+		if (strcmp("resethalt", CMD_ARGV[0]) == 0)
+			resethalt = true;
+	}
 
 	int retval;
 	static int initialized;
@@ -120,7 +126,11 @@ COMMAND_HANDLER(handle_init_command)
 
 	bool save_poll_mask = jtag_poll_mask();
 
-	retval = command_run_line(CMD_CTX, "target init");
+	if (resethalt)
+		retval = command_run_line(CMD_CTX, "target init resethalt");
+	else
+		retval = command_run_line(CMD_CTX, "target init");
+
 	if (retval != ERROR_OK)
 		return ERROR_FAIL;
 
@@ -213,7 +223,7 @@ static const struct command_registration openocd_command_handlers[] = {
 			"Changes command mode from CONFIG to EXEC.  "
 			"Unless 'noinit' is called, this command is "
 			"called automatically at the end of startup.",
-		.usage = ""
+		.usage = "[resethalt]"
 	},
 	{
 		.name = "add_script_search_dir",

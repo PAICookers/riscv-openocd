@@ -1844,6 +1844,13 @@ static int examine_dm(struct target *target)
 
 	dm->current_hartid = HART_INDEX_UNKNOWN;
 
+	if (target->resethalt_during_init) {
+		dmi_write(target, DM_DMCONTROL, DM_DMCONTROL_SETRESETHALTREQ | DM_DMCONTROL_DMACTIVE);
+		dmi_write(target, DM_DMCONTROL, DM_DMCONTROL_NDMRESET | DM_DMCONTROL_DMACTIVE);
+		dmi_write(target, DM_DMCONTROL, DM_DMCONTROL_DMACTIVE);
+		dmi_write(target, DM_DMCONTROL, DM_DMCONTROL_CLRRESETHALTREQ | DM_DMCONTROL_DMACTIVE);
+	}
+
 	result = dm_write(target, DM_DMCONTROL, DM_DMCONTROL_HARTSELLO |
 			DM_DMCONTROL_HARTSELHI | DM_DMCONTROL_DMACTIVE |
 			DM_DMCONTROL_HASEL);
