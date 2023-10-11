@@ -121,6 +121,8 @@ static void oscan1_mpsse_clock_tms_cs_out(struct mpsse_ctx *ctx, const uint8_t *
 					  unsigned length, bool tdi, uint8_t mode);
 
 static bool oscan1_mode;
+static bool nscan1_mode;
+static int nscan1_ignore_tlr_rst;
 
 /*
   The cJTAG 4-wire JScan3 allows to use standard JTAG protocol with cJTAG hardware
@@ -277,7 +279,7 @@ static int ftdi_get_signal(const struct signal *s, uint16_t *value_out)
 static void clock_data(struct mpsse_ctx *ctx, const uint8_t *out, unsigned out_offset, uint8_t *in,
 		     unsigned in_offset, unsigned length, uint8_t mode)
 {
-	if (oscan1_mode)
+	if (oscan1_mode || nscan1_mode)
 		oscan1_mpsse_clock_data(ctx, out, out_offset, in, in_offset, length, mode);
 	else
 		mpsse_clock_data(ctx, out, out_offset, in, in_offset, length, mode);
@@ -286,7 +288,7 @@ static void clock_data(struct mpsse_ctx *ctx, const uint8_t *out, unsigned out_o
 static void clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out, unsigned out_offset, uint8_t *in,
 		       unsigned in_offset, unsigned length, bool tdi, uint8_t mode)
 {
-	if (oscan1_mode)
+	if (oscan1_mode || nscan1_mode)
 		oscan1_mpsse_clock_tms_cs(ctx, out, out_offset, in, in_offset, length, tdi, mode);
 	else
 		mpsse_clock_tms_cs(ctx, out, out_offset, in, in_offset, length, tdi, mode);
@@ -295,7 +297,7 @@ static void clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out, unsigned out
 static void clock_tms_cs_out(struct mpsse_ctx *ctx, const uint8_t *out, unsigned out_offset,
 			   unsigned length, bool tdi, uint8_t mode)
 {
-	if (oscan1_mode)
+	if (oscan1_mode || nscan1_mode)
 		oscan1_mpsse_clock_tms_cs_out(ctx, out, out_offset, length, tdi, mode);
 	else
 		mpsse_clock_tms_cs_out(ctx, out, out_offset, length, tdi, mode);
@@ -675,10 +677,13 @@ static void ftdi_execute_command(struct jtag_command *cmd)
 			ftdi_execute_runtest(cmd);
 			break;
 		case JTAG_TLR_RESET:
+			for (size_t i = 0; i < 5; i++)
+				ftdi_execute_statemove(cmd);
 #if BUILD_FTDI_CJTAG == 1
 			cjtag_reset_online_activate(); /* put the target (back) into selected cJTAG mode */
 #endif
-			ftdi_execute_statemove(cmd);
+			if (!nscan1_mode)
+				ftdi_execute_statemove(cmd);
 			break;
 		case JTAG_PATHMOVE:
 			ftdi_execute_pathmove(cmd);
@@ -753,7 +758,7 @@ static int ftdi_initialize(void)
 		if (sig->data_mask)
 			ftdi_set_signal(sig, '1');
 #if BUILD_FTDI_CJTAG == 1
-	} else if (oscan1_mode || jscan3_mode) {
+	} else if (oscan1_mode || nscan1_mode || jscan3_mode) {
 		struct signal *sig = find_signal_by_name("JTAG_SEL");
 		if (!sig) {
 			LOG_ERROR("A cJTAG mode is active but JTAG_SEL signal is not defined");
@@ -849,6 +854,7 @@ static void oscan1_mpsse_clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out,
 {
 	static const uint8_t zero;
 	static const uint8_t one = 1;
+	uint8_t old_tmsbit = 1;
 
 	struct signal *tmsc_en = find_signal_by_name("TMSC_EN");
 
@@ -856,7 +862,7 @@ static void oscan1_mpsse_clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out,
 
 	for (unsigned i = 0; i < length; i++) {
 		int bitnum;
-		uint8_t tmsbit;
+		uint8_t tmsbit = 1;
 		uint8_t tdibit;
 
 		/* OScan1 uses 3 separate clocks */
@@ -867,6 +873,9 @@ static void oscan1_mpsse_clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out,
 		/* drive TMSC to desired TMS value */
 		bitnum = out_offset + i;
 		tmsbit = ((out[bitnum/8] >> (bitnum%8)) & 0x1);
+		if (tmsbit == 1 && old_tmsbit == 1 && nscan1_ignore_tlr_rst == 1)
+			continue;
+		old_tmsbit = tmsbit;
 
 		if (tdibit == tmsbit) {
 			/* Can squash into a single MPSSE command */
@@ -887,6 +896,7 @@ static void oscan1_mpsse_clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out,
 		if (tmsc_en)
 			ftdi_set_signal(tmsc_en, '1'); /* drive again TMSC */
 	}
+	nscan1_ignore_tlr_rst = 0;
 }
 
 
@@ -903,6 +913,29 @@ static void cjtag_set_tck_tms_tdi(struct signal *tck, char tckvalue, struct sign
 	ftdi_set_signal(tms, tmsvalue);
 	ftdi_set_signal(tdi, tdivalue);
 	ftdi_set_signal(tck, tckvalue);
+}
+
+static void nscan1_run_sequence(uint32_t *sequence, size_t size)
+{
+	struct signal *tck = find_signal_by_name("TCK");
+	struct signal *tdi = find_signal_by_name("TDI");
+	struct signal *tms = find_signal_by_name("TMS");
+	struct signal *tdo = find_signal_by_name("TDO");
+
+	uint16_t tdovalue;
+
+	uint32_t i, j;
+
+	for (i = 0; i < size; i += 2) {
+		uint32_t val = sequence[i];
+		uint32_t cnt = sequence[i + 1];
+		for (j = 0; j < cnt; j++) {
+			cjtag_set_tck_tms_tdi(tck, '0', tms, '1', tdi, val & 0x1 ? '1' : '0');
+			cjtag_set_tck_tms_tdi(tck, '1', tms, '1', tdi, val & 0x1 ? '1' : '0');
+			val >>= 1;
+		}
+	}
+	ftdi_get_signal(tdo, &tdovalue);
 }
 
 static void cjtag_reset_online_activate(void)
@@ -1031,11 +1064,15 @@ static void cjtag_reset_online_activate(void)
 		{'0', '1', '0'},
 	};
 
-	if (!oscan1_mode && !jscan3_mode)
-		return; /* Nothing to do */
+	if (!oscan1_mode && !nscan1_mode && !jscan3_mode) {
+		/* Send a Escape Reset for Old TAP */
+		for (size_t i = 0; i < 11; i++)
+			cjtag_set_tck_tms_tdi(tck, sequence[i].tck, tms, sequence[i].tdi, tdi, sequence[i].tms);
+		goto flush;
+	}
 
-	if (oscan1_mode && jscan3_mode) {
-		LOG_ERROR("Both oscan1_mode and jscan3_mode are \"on\". At most one of them can be enabled.");
+	if (oscan1_mode && nscan1_mode && jscan3_mode) {
+		LOG_ERROR("Both oscan1_mode nscan1_mode and jscan3_mode are \"on\". At most one of them can be enabled.");
 		return;
 	}
 
@@ -1070,13 +1107,53 @@ static void cjtag_reset_online_activate(void)
 		tms = tmsc_en;
 
 	/* Send the sequence to the adapter */
-	for (size_t i = 0; i < sizeof(sequence)/sizeof(sequence[0]); i++)
-		cjtag_set_tck_tms_tdi(tck, sequence[i].tck, tms, sequence[i].tms, tdi, sequence[i].tdi);
+	uint32_t tms_sequence[] = {
+		0xFFFFFFFF, 3, /* TLR-RST */
+		0x1A, 5, /* ZBS #1 */
+		0x0D, 4, /* ZBS #2 */
+		0x19, 5, /* LOCK */
+		0x61, 7, /* CMD2-3 SCNFMT */
+		0x1801, 14, /* CMD2-9 OSCAN1 */
+		0x0, 4,  /* CP */
+
+		/* OScan 1 mode on from this time*/
+		0x00000010, 32,
+		0x00000120, 13, /* CMD2-9 */
+
+		/* 0x00090010, 24,  CMD2-2 */
+		0x10, 9,
+		/* 0x00, 6, CNFG0 */
+		0x12, 9, /* CMD2 - 0 */
+
+		0x10, 12 /* CR-Scan SDR */
+	};
+	uint32_t to_normal_seq[] = {
+		0x12, 9, /* TO RTI */
+		0x00, 4, /* CP */
+		0x12090, 21  /* ZBS IR, EXIT */
+	};
+	uint8_t check_out[8] = {0x00};
+
+	nscan1_ignore_tlr_rst = 0;
+	nscan1_run_sequence(tms_sequence, ARRAY_SIZE(tms_sequence));
+
+	/* Now in SDR */
+	oscan1_mpsse_clock_data(mpsse_ctx, NULL, 0, check_out, 0, 32, ftdi_jtag_mode);
+	nscan1_run_sequence(to_normal_seq, ARRAY_SIZE(to_normal_seq));
+
+	if (check_out[0] != 0x9) {
+		LOG_INFO("hbird_debugger: This TAP's version is too old, trying use async sequence to handshake..");
+		for (size_t i = 0; i < ARRAY_SIZE(sequence); i++)
+			cjtag_set_tck_tms_tdi(tck, sequence[i].tck, tms, sequence[i].tms, tdi, sequence[i].tdi);
+	} else {
+		nscan1_ignore_tlr_rst = 1;
+	}
 
 	/* If JScan3 mode, configure cJTAG adapter to 4-wire */
 	if (jscan3_mode)
 		ftdi_set_signal(find_signal_by_name("JTAG_SEL"), '1');
 
+flush:
 	ftdi_get_signal(tdo, &tdovalue);  /* Just to force a flush */
 }
 
@@ -1306,6 +1383,18 @@ COMMAND_HANDLER(ftdi_handle_oscan1_mode_command)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(ftdi_handle_nscan1_mode_command)
+{
+	if (CMD_ARGC > 1)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	if (CMD_ARGC == 1)
+		COMMAND_PARSE_ON_OFF(CMD_ARGV[0], nscan1_mode);
+
+	command_print(CMD, "nscan1 mode: %s.", nscan1_mode ? "on" : "off");
+	return ERROR_OK;
+}
+
 COMMAND_HANDLER(ftdi_handle_jscan3_mode_command)
 {
 	if (CMD_ARGC > 1)
@@ -1386,6 +1475,13 @@ static const struct command_registration ftdi_subcommand_handlers[] = {
 		.handler = &ftdi_handle_oscan1_mode_command,
 		.mode = COMMAND_ANY,
 		.help = "set to 'on' to use OScan1 mode for signaling, otherwise 'off' (default is 'off')",
+		.usage = "(on|off)",
+	},
+	{
+		.name = "nscan1_mode",
+		.handler = &ftdi_handle_nscan1_mode_command,
+		.mode = COMMAND_ANY,
+		.help = "set to 'on' to use NScan1 mode for signaling, otherwise 'off' (default is 'off')",
 		.usage = "(on|off)",
 	},
 	{
