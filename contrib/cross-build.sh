@@ -42,6 +42,7 @@ WORK_DIR=$PWD
 : ${LIBFTDI_SRC:=/path/to/libftdi}
 : ${CAPSTONE_SRC:=/path/to/capstone}
 : ${LIBJAYLINK_SRC:=/path/to/libjaylink}
+: ${FTD2XX_SRC:=/path/to/ftd2xx}
 
 OPENOCD_SRC=`readlink -m $OPENOCD_SRC`
 LIBUSB1_SRC=`readlink -m $LIBUSB1_SRC`
@@ -49,6 +50,7 @@ HIDAPI_SRC=`readlink -m $HIDAPI_SRC`
 LIBFTDI_SRC=`readlink -m $LIBFTDI_SRC`
 CAPSTONE_SRC=`readlink -m $CAPSTONE_SRC`
 LIBJAYLINK_SRC=`readlink -m $LIBJAYLINK_SRC`
+FTD2XX_SRC=`readlink -m $FTD2XX_SRC`
 
 HOST_TRIPLET=$1
 BUILD_DIR=$WORK_DIR/$HOST_TRIPLET-build
@@ -170,6 +172,13 @@ if [ -d $LIBJAYLINK_SRC ] ; then
     $LIBJAYLINK_CONFIG
   make -j $MAKE_JOBS
   make install DESTDIR=$SYSROOT
+# ftd2xx copy to sysroot
+if [ -d $FTD2XX_SRC ] ; then
+    FTD2XX_LIB_SRC=${FTD2XX_SRC}/amd64
+    if [[ "$HOST_TRIPLET" == *"w32"* ]] ; then
+        FTD2XX_LIB_SRC=${FTD2XX_SRC}/i386
+    fi
+    cp -f ${FTD2XX_LIB_SRC}/* $SYSROOT/usr/lib/
 fi
 
 # OpenOCD build & install into sysroot
