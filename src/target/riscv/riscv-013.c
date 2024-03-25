@@ -1871,6 +1871,7 @@ static int examine_dm(struct target *target)
 
 	/* Before doing anything else we must first enumerate the harts. */
 	const int max_hart_count = MIN(RISCV_MAX_HARTS, hartsel + 1);
+	uint64_t value;
 	if (dm->hart_count < 0) {
 		for (int i = 0; i < max_hart_count; ++i) {
 			/* TODO: This is extremely similar to
@@ -1904,6 +1905,13 @@ static int examine_dm(struct target *target)
 				if (result != ERROR_OK)
 					return result;
 			}
+
+			value = nuclei_get_dmcustom(target, 0, i, 0);
+			LOG_INFO("coreid=%d, 00 : 0x%lx", i, value);
+			value = nuclei_get_dmcustom(target, 0, i, 16);
+			LOG_INFO("coreid=%d, 16 : 0x%lx", i, value);
+			value = nuclei_get_dmcustom(target, 0, i, 32);
+			LOG_INFO("coreid=%d, 32 : 0x%lx", i, value);
 		}
 		LOG_TARGET_DEBUG(target, "Detected %d harts.", dm->hart_count);
 	}

@@ -27,6 +27,7 @@
 #include "debug_defines.h"
 #include <helper/bits.h>
 #include "field_helpers.h"
+#include "nuclei_riscv.h"
 
 /*** JTAG registers. ***/
 
@@ -567,6 +568,10 @@ static void riscv_deinit_target(struct target *target)
 	}
 
 	list_for_each_entry_safe(entry, tmp, &info->expose_custom, list) {
+		free(entry->name);
+		free(entry);
+	}
+	list_for_each_entry_safe(entry, tmp, &info->expose_nuclei_cpu_core, list) {
 		free(entry->name);
 		free(entry);
 	}
@@ -4150,7 +4155,6 @@ COMMAND_HANDLER(riscv_set_mem_access)
 	return ERROR_OK;
 }
 
-
 static bool parse_csr_address(const char *reg_address_str, unsigned int *reg_addr)
 {
 	*reg_addr = -1;
@@ -5632,6 +5636,13 @@ static const struct command_registration riscv_command_handlers[] = {
 		.chain = semihosting_common_handlers
 	},
 	{
+		.name = "nuclei",
+		.mode = COMMAND_ANY,
+		.help = "Nuclei Command Group",
+		.usage = "",
+		.chain = nuclei_command_group_handlers
+	},
+	{
 		.chain = smp_command_handlers
 	},
 	COMMAND_REGISTRATION_DONE
@@ -5730,6 +5741,7 @@ static void riscv_info_init(struct target *target, struct riscv_info *r)
 	INIT_LIST_HEAD(&r->expose_csr);
 	INIT_LIST_HEAD(&r->expose_custom);
 	INIT_LIST_HEAD(&r->hide_csr);
+	INIT_LIST_HEAD(&r->expose_nuclei_cpu_core);
 
 	r->vsew64_supported = YNM_MAYBE;
 

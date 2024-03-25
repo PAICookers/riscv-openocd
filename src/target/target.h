@@ -121,6 +121,7 @@ struct target {
 	char *cmd_name;				/* tcl Name of target */
 	struct jtag_tap *tap;				/* where on the jtag chain is this */
 	int32_t coreid;						/* which device on the TAP? */
+	char *current_target_name;
 
 	/** Should we defer examine to later */
 	bool defer_examine;
