@@ -342,4 +342,28 @@ static uint32_t vslide1down_vx(unsigned int vd, unsigned int vs2,
 	return ((vm & 1) << 25) | inst_rs2(vs2) | inst_rs1(rs1) | inst_rd(vd) | MATCH_VSLIDE1DOWN_VX;
 }
 
+static uint32_t vle32_v(unsigned int rs1, unsigned int vd) __attribute__((unused));
+static uint32_t vle32_v(unsigned int rs1, unsigned int vd)
+{
+	return inst_rs1(rs1) | inst_rd(vd) | 0x02006007;
+}
+
+static uint32_t vse32_v(unsigned int rs1, unsigned int vd) __attribute__((unused));
+static uint32_t vse32_v(unsigned int rs1, unsigned int vd)
+{
+	return inst_rs1(rs1) | inst_rd(vd) | 0x02006027;
+}
+
+static uint32_t vle64_v(unsigned int rs1, unsigned int vs3) __attribute__((unused));
+static uint32_t vle64_v(unsigned int rs1, unsigned int vs3)
+{
+	return inst_rs1(rs1) | inst_rd(vs3) | 0x02007007;
+}
+
+static uint32_t vse64_v(unsigned int rs1, unsigned int vs3) __attribute__((unused));
+static uint32_t vse64_v(unsigned int rs1, unsigned int vs3)
+{
+	return inst_rs1(rs1) | inst_rd(vs3) | 0x02007027;
+}
+
 #endif /* OPENOCD_TARGET_RISCV_OPCODES_H */

@@ -2287,6 +2287,7 @@ int riscv013_get_register_buf(struct target *target, uint8_t *value,
 	unsigned int vnum = regno - GDB_REGNO_V0;
 
 	int result = ERROR_OK;
+	bool vslide1down_fail = false;
 	for (unsigned int i = 0; i < debug_vl; i++) {
 		/* Can't reuse the same program because riscv_program_exec() adds
 		 * ebreak to the end every time. */
@@ -2304,15 +2305,41 @@ int riscv013_get_register_buf(struct target *target, uint8_t *value,
 		result = riscv_program_exec(&program, target);
 		if (result == ERROR_OK) {
 			riscv_reg_t v;
-			if (register_read_direct(target, &v, GDB_REGNO_S0) != ERROR_OK)
-				return ERROR_FAIL;
+			if (register_read_direct(target, &v, GDB_REGNO_S0) != ERROR_OK) {
+				vslide1down_fail = true;
+				break;
+			}
 			buf_set_u64(value, debug_vsew * i, debug_vsew, v);
 		} else {
-			LOG_TARGET_ERROR(target,
-					"Failed to execute vmv/vslide1down while reading %s",
-					riscv_reg_gdb_regno_name(target, regno));
+			vslide1down_fail = true;
 			break;
 		}
+	}
+
+	if (vslide1down_fail) {
+		LOG_TARGET_WARNING(target,
+				"Failed to execute vmv/vslide1down while reading %s",
+				riscv_reg_gdb_regno_name(target, regno));
+		struct working_area *algorithm_v = NULL;
+
+		result = target_alloc_working_area(target, riscv_vlenb(target), &algorithm_v);
+		if (result != ERROR_OK)
+			LOG_TARGET_ERROR(target, "Failed to alloc workarea while read");
+		register_write_direct(target, GDB_REGNO_S0, algorithm_v->address);
+
+		struct riscv_program program;
+		riscv_program_init(&program, target);
+		if (debug_vsew == 32)
+			riscv_program_insert(&program, vse32_v(S0, vnum));
+		else
+			riscv_program_insert(&program, vse64_v(S0, vnum));
+
+		result = riscv_program_exec(&program, target);
+		if (result != ERROR_OK)
+			LOG_TARGET_ERROR(target, "Failed to execute vse while read");
+		read_memory(target, algorithm_v->address, 1, riscv_vlenb(target), value, 1);
+
+		target_free_working_area(target, algorithm_v);
 	}
 
 	if (cleanup_after_vector_access(target, mstatus, vtype, vl) != ERROR_OK)
@@ -2345,13 +2372,42 @@ int riscv013_set_register_buf(struct target *target, enum gdb_regno regno,
 	riscv_program_init(&program, target);
 	riscv_program_insert(&program, vslide1down_vx(vnum, vnum, S0, true));
 	int result = ERROR_OK;
+	bool vslide1down_fail = false;
 	for (unsigned int i = 0; i < debug_vl; i++) {
 		if (register_write_direct(target, GDB_REGNO_S0,
 					buf_get_u64(value, debug_vsew * i, debug_vsew)) != ERROR_OK)
 			return ERROR_FAIL;
 		result = riscv_program_exec(&program, target);
-		if (result != ERROR_OK)
+		if (result != ERROR_OK) {
+			vslide1down_fail = true;
 			break;
+		}
+	}
+
+	if (vslide1down_fail) {
+		LOG_TARGET_WARNING(target,
+				"Failed to execute vmv/vslide1down while reading %s",
+				riscv_reg_gdb_regno_name(target, regno));
+		struct working_area *algorithm_v = NULL;
+
+		result = target_alloc_working_area(target, riscv_vlenb(target), &algorithm_v);
+		if (result != ERROR_OK)
+			LOG_TARGET_ERROR(target, "Failed to alloc workarea while write");
+		register_write_direct(target, GDB_REGNO_S0, algorithm_v->address);
+		write_memory(target, algorithm_v->address, 1, riscv_vlenb(target), value);
+
+		struct riscv_program program;
+		riscv_program_init(&program, target);
+		if (debug_vsew == 32)
+			riscv_program_insert(&program, vle32_v(S0, vnum));
+		else
+			riscv_program_insert(&program, vle64_v(S0, vnum));
+
+		result = riscv_program_exec(&program, target);
+		if (result != ERROR_OK)
+			LOG_TARGET_ERROR(target, "Failed to execute vle while write");
+
+		target_free_working_area(target, algorithm_v);
 	}
 
 	if (cleanup_after_vector_access(target, mstatus, vtype, vl) != ERROR_OK)
