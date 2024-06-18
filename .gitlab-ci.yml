@@ -246,6 +246,7 @@ deploy-openocd:
       cp -f ${openocd_deploy_zip} $shareloc/
       ls -lht ${shareloc}/
       rm -rf deploy
+    - shareloc="/home/share/devtools/openocd/linux64"
     - echo "OpenOCD successfully deployed to share environment $shareloc/${openocd_ver}"
   artifacts:
     name: "openocd_deploy_${CI_COMMIT_TIMESTAMP::10}_${CI_COMMIT_SHA::8}"
