@@ -8,6 +8,27 @@ If the tool version and documentation version not match, please take care.
 
 ## 2024.12
 
+* improvement of ci and doc
+* replace vslide1down_vx to read/write vx register
+* support live watch feature
+* organize nuclei commands into nuclei_riscv.c
+* add nuclei cti command group
+* update nuclei etrace command group
+* optimise nuclei cpuinfo command
+
+* add new nuclei customized csr
+	| new csr addr | new csr name |
+	| ------ | ------ |
+	| 0x1a4~0x1af | smpuaddr4~15 |
+	| 0x1c0~0x1ef | smpuaddr16~63 |
+* rename nuclei customized csr
+	| old name | new name |
+	| ------ | ------ |
+	| spmpcfg0~3 | smpucfg0~3 |
+	| spmpaddr0~15 | smpuaddr0~15 |
+	| mfp16mode | mmisc_ctl1 |
+	| mecc_ctrl | mecc_ctl |
+	| mstack_ctrl | mstack_ctl |
 * changes are based on [riscv/riscv-openocd](https://github.com/riscv-collab/riscv-openocd/commit/f9a12927)
 
 ## 2024.06

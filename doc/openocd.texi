@@ -79,6 +79,7 @@ Documentation License''.
 * JTAG Commands::                    JTAG Commands
 * Boundary Scan Commands::           Boundary Scan Commands
 * Utility Commands::                 Utility Commands
+* Nuclei Commands::                  Nuclei Commands
 * GDB and OpenOCD::                  Using GDB and OpenOCD
 * Tcl Scripting API::                Tcl Scripting API
 * FAQ::                              Frequently Asked Questions
@@ -6386,6 +6387,17 @@ flash bank $_FLASHNAME fespi 0x20000000 0 0 0 $_TARGETNAME
 @end example
 @end deffn
 
+@deffn {Flash Driver} {nuspi}
+@cindex Nuclei SPI
+@cindex nuspi
+
+Nuclei's SPI controller, used in Nuclei RISC-V fpga evaluation board and other boards.
+
+@example
+flash bank $_FLASHNAME nuspi 0x20000000 0 0 0 $_TARGETNAME
+@end example
+@end deffn
+
 @subsection Internal Flash (Microcontrollers)
 
 @deffn {Flash Driver} {aduc702x}
@@ -12610,6 +12622,169 @@ devices recovery with JTAG.
 For quickstart instructions run:
 @example
 openocd -f tools/firmware-recovery.tcl -c firmware_help
+@end example
+
+@node Nuclei Commands
+@chapter Nuclei Commands
+@cindex Nuclei Commands
+
+The commands here apply only to Nuclei series CPUs.
+
+@section Show CPU Info
+@cindex Show CPU Info
+
+Usually we don't know what instruction sets a CPU supports,
+what functional components it contains, and the various configurations
+of the components. The only way to get the desired information is to
+read the corresponding CSR registers and then do the math. It would
+be a pain in the ass to do this for every function point that needs
+to be known. This command is designed to solve this problem by
+automatically reading the CSRs and doing the math, and then formatting the output.
+
+This command should be executed after the @command{init} command.
+
+@deffn {Command} {nuclei cpuinfo}
+Displays some information about the currently used CPU.
+@end deffn
+
+@section Etrace Commands
+@cindex Etrace Commands
+
+Some Nuclei cpus are equipped with trace support, which permits
+examination of the instruction activity. Trace activity is controlled
+through an ``Embedded Trace``(Etrace) Module on the core's scan chains.
+The following commands are for etrace.
+
+This command should be executed after the @command{init} command.
+
+@deffn {Command} {nuclei etrace config} atb2axi-config-addr buffer-addr buffer-size wrap
+Configure each parameter needed for etrace.
+Command options:
+@itemize @bullet
+@item @option{atb2axi-config-addr} The address of the atb2axi controller.
+@item @option{buffer-addr} The base address of etrace buffer.
+@item @option{buffer-size} The bytes size of the etrace buffer.
+@item @option{wrap} [0|1] Whether trace data is automatically looped back for overwriting.
+@end itemize
+@end deffn
+
+@deffn {Command} {nuclei etrace enable}
+Enable the etrace switch within the CPU.
+@end deffn
+
+@deffn {Command} {nuclei etrace disable}
+Disable the etrace switch within the CPU.
+@end deffn
+
+@deffn {Command} {nuclei etrace start}
+Start etrace data collection.
+@end deffn
+
+@deffn {Command} {nuclei etrace stop}
+Stop etrace data collection.
+@end deffn
+
+@deffn {Command} {nuclei etrace dump} filename
+dump etrace data to the specified file.
+@end deffn
+
+@deffn {Command} {nuclei etrace clear}
+clear etrace register status and flags.
+@end deffn
+
+@deffn {Command} {nuclei etrace info}
+display etrace some info.
+@end deffn
+
+@section Extended Commands
+@cindex Extended Commands
+
+Nuclei extends the functionality of some existing commands, as described below.
+
+@deffn {Command} {ftdi nscan1_mode} on|off
+Enable or disable Nuclei CJTAG mode. Usage is the same as @command{ftdi oscan1_mode}.
+@end deffn
+
+@deffn {Command} {flash bank} name driver base size chip_width bus_width target [driver_options]
+Nuclei extends this command with two drivers, nuspi and custom.
+Use can refer to the @command{flash bank} command.
+@end deffn
+
+@itemize @bullet
+@item @option{driver_options} ...
+
+For nuspi, [driver_options] has two options, the final command
+format looks like this:
+@example
+flash bank name nuspi base size chip_width bus_width target \
+[spi_base] [simulation]
+@end example
+
+For custom, [driver_options] has three options, the final command
+format looks like this:
+@example
+flash bank name custom base size chip_width bus_width target \
+spi_base loader_path [simulation] [sectorsize=]
+@end example
+
+@end itemize
+
+Here are some examples for nuspi:
+@example
+# if spi_base is not specified then spi_base is 0x10014000.
+flash bank $FLASHNAME nuspi 0x20000000 0 0 0 $TARGETNAME
+
+# Without the simulation parameter, the flash operation will have
+# a timeout, the value of which is automatically calculated according
+# to the size of the operation data volume.
+flash bank $FLASHNAME nuspi 0x20000000 0 0 0 $TARGETNAME 0x10180000
+
+# If the simulation parameter is present, the flash operation will
+# no longer time out.
+flash bank $FLASHNAME nuspi 0x20000000 0 0 0 $TARGETNAME 0x10180000 \
+simulation
+@end example
+
+Here are some examples for custom:
+@example
+# Without the simulation parameter, the flash operation will have a
+# timeout, the value of which is automatically calculated according
+# to the size of the operation data volume.
+flash bank $FLASHNAME custom 0x20000000 0 0 0 $TARGETNAME 0x10180000 \
+/home/admin/flashloader.bin
+
+# If the simulation parameter is present, the flash operation will no
+# longer time out. if the sectorsize parameter is not specified,
+# then sectorsize is 0x10000.
+flash bank $FLASHNAME custom 0x20000000 0 0 0 $TARGETNAME 0x10180000 \
+/home/admin/flashloader.bin simulation
+
+flash bank $FLASHNAME custom 0x20000000 0 0 0 $TARGETNAME 0x10180000 \
+/home/admin/flashloader.bin sectorsize=0x1000
+
+flash bank $FLASHNAME custom 0x20000000 0 0 0 $TARGETNAME 0x10180000 \
+/home/admin/flashloader.bin simulation sectorsize=0x1000
+
+flash bank $FLASHNAME nuspi 0x20000000 0 0 0 $TARGETNAME 0x10180000 \
+/home/admin/flashloader.bin sectorsize=0x1000 simulation
+@end example
+
+This flashloader.bin is compiled and generated through the openocd-flashloader project,
+the open source address is https://github.com/riscv-mcu/openflashloader.
+
+@deffn {Command} {init} resethalt
+Nuclei extends the init command with the resethalt parameter.
+Usage is the same as @command{init}.
+@end deffn
+
+In practice, usually encountered due to software problems caused by the CPU stuck,
+then the debugger will not be connected to the development board, only to the
+development board power off. If your code is running in flash, powering down
+the board will not solve the problem. resethalt is designed to solve this problem.
+
+Here are some examples:
+@example
+init resethalt
 @end example
 
 @node GDB and OpenOCD
