@@ -388,6 +388,8 @@ static int custom_probe(struct flash_bank *bank)
 			break;
 		}
 	}
+	if (bank->size == 0)
+		bank->size = bank_msg->dev->size_in_bytes;
 	/* if no sectors, treat whole bank as single sector */
 	if (0 == bank_msg->sectorsize) {
 		bank_msg->sectorsize = bank_msg->dev->sectorsize ?
