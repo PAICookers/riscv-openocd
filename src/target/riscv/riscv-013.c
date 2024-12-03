@@ -1906,12 +1906,10 @@ static int examine_dm(struct target *target)
 					return result;
 			}
 
-			value = nuclei_get_dmcustom(target, 0, i, 0);
-			LOG_INFO("coreid=%d, 00 : 0x%lx", i, value);
-			value = nuclei_get_dmcustom(target, 0, i, 16);
-			LOG_INFO("coreid=%d, 16 : 0x%lx", i, value);
-			value = nuclei_get_dmcustom(target, 0, i, 32);
-			LOG_INFO("coreid=%d, 32 : 0x%lx", i, value);
+			// NOTE: Nuclei added
+			LOG_INFO("coreid=%d, nuclei debug map reg 00: 0x%lx, 16: 0x%lx, 32: 0x%lx", \
+				i, nuclei_get_dmcustom(target, 0, i, 0), nuclei_get_dmcustom(target, 0, i, 16), \
+				nuclei_get_dmcustom(target, 0, i, 32));
 		}
 		LOG_TARGET_DEBUG(target, "Detected %d harts.", dm->hart_count);
 	}
