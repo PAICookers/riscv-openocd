@@ -604,7 +604,7 @@ static bool can_use_napot_match(struct trigger *trigger)
 }
 
 /* Find the next free trigger of the given type, without talking to the target. */
-static int find_next_free_trigger(struct target *target, int type, bool chained,
+int find_next_free_trigger(struct target *target, int type, bool chained,
 		unsigned int *idx)
 {
 	assert(idx);

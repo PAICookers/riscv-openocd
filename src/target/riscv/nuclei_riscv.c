@@ -386,6 +386,7 @@ COMMAND_HANDLER(handle_nuclei_cpuinfo)
 static target_addr_t atb2axi_config_addr = 0xa5a5a5a5;
 static target_addr_t buffer_addr = 0xa5a5a5a5;
 static uint32_t buffer_size;
+static riscv_reg_t tselect = 0xa5a5a5a5;
 
 static int etrace_read_reg(struct target *target, uint32_t offset, uint32_t *value)
 {
@@ -447,6 +448,8 @@ COMMAND_HANDLER(handle_etrace_config_command)
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], buffer_size);
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[3], wrap);
 
+	etrace_write_reg(target, ETRACE_ENDOFFSET, 0);
+	etrace_write_reg(target, ETRACE_FLG, 0);
 	etrace_write_reg(target, ETRACE_BASE_HI, (uint32_t)(buffer_addr >> 32));
 	etrace_write_reg(target, ETRACE_BASE_LO, (uint32_t)buffer_addr);
 	etrace_write_reg(target, ETRACE_WLEN, buffer_size);
@@ -474,13 +477,18 @@ COMMAND_HANDLER(handle_etrace_enable_command)
 		target_real = target;
 
 	riscv_reg_t dpc_rb;
-	riscv_reg_t tselect = 0;
 	riscv_reg_t tdata1 = field_value(CSR_MCONTROL_TYPE(riscv_xlen(target_real)), CSR_TDATA1_TYPE_MCONTROL) |
 							field_value(CSR_MCONTROL_ACTION, CSR_MCONTROL_ACTION_TRACE_ON) |
 							field_value(CSR_MCONTROL_M, 1) |
 							field_value(CSR_MCONTROL_S, 1) |
 							field_value(CSR_MCONTROL_U, 1) |
 							field_value(CSR_MCONTROL_EXECUTE, 1);
+	RISCV_INFO(r);
+	if (atb2axi_config_addr == 0xa5a5a5a5) {
+		if (find_next_free_trigger(target_real, CSR_TDATA1_TYPE_MCONTROL, false, &tselect) != ERROR_OK)
+			return ERROR_FAIL;
+		r->reserved_triggers[tselect] = true;
+	}
 	if (riscv_reg_set(target_real, GDB_REGNO_TSELECT, tselect) != ERROR_OK)
 		return ERROR_FAIL;
 	if (riscv_reg_set(target_real, GDB_REGNO_TDATA1, tdata1) != ERROR_OK)
@@ -506,7 +514,6 @@ COMMAND_HANDLER(handle_etrace_disable_command)
 		target_real = target;
 
 	riscv_reg_t dpc_rb;
-	riscv_reg_t tselect = 1;
 	riscv_reg_t tdata1 = field_value(CSR_MCONTROL_TYPE(riscv_xlen(target_real)), CSR_TDATA1_TYPE_MCONTROL) |
 							field_value(CSR_MCONTROL_ACTION, CSR_MCONTROL_ACTION_TRACE_OFF) |
 							field_value(CSR_MCONTROL_M, 1) |
