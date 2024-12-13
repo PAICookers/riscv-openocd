@@ -386,7 +386,6 @@ COMMAND_HANDLER(handle_nuclei_cpuinfo)
 static target_addr_t atb2axi_config_addr = 0xa5a5a5a5;
 static target_addr_t buffer_addr = 0xa5a5a5a5;
 static uint32_t buffer_size;
-static riscv_reg_t tselect = 0xa5a5a5a5;
 
 static int etrace_read_reg(struct target *target, uint32_t offset, uint32_t *value)
 {
@@ -477,6 +476,7 @@ COMMAND_HANDLER(handle_etrace_enable_command)
 		target_real = target;
 
 	riscv_reg_t dpc_rb;
+	riscv_reg_t tselect;
 	riscv_reg_t tdata1 = field_value(CSR_MCONTROL_TYPE(riscv_xlen(target_real)), CSR_TDATA1_TYPE_MCONTROL) |
 							field_value(CSR_MCONTROL_ACTION, CSR_MCONTROL_ACTION_TRACE_ON) |
 							field_value(CSR_MCONTROL_M, 1) |
@@ -484,11 +484,15 @@ COMMAND_HANDLER(handle_etrace_enable_command)
 							field_value(CSR_MCONTROL_U, 1) |
 							field_value(CSR_MCONTROL_EXECUTE, 1);
 	RISCV_INFO(r);
-	if (atb2axi_config_addr == 0xa5a5a5a5) {
-		if (find_next_free_trigger(target_real, CSR_TDATA1_TYPE_MCONTROL, false, &tselect) != ERROR_OK)
+	if (target_real->etrace_trigger_index == 0xFFFFFFFF) {
+		if (find_next_free_trigger(target_real, CSR_TDATA1_TYPE_MCONTROL, false,
+					&target_real->etrace_trigger_index) != ERROR_OK) {
+			LOG_ERROR("No available trigger could be reserved for etrace usage.\n");
 			return ERROR_FAIL;
-		r->reserved_triggers[tselect] = true;
+		}
+		r->reserved_triggers[target_real->etrace_trigger_index] = true;
 	}
+	tselect = target_real->etrace_trigger_index;
 	if (riscv_reg_set(target_real, GDB_REGNO_TSELECT, tselect) != ERROR_OK)
 		return ERROR_FAIL;
 	if (riscv_reg_set(target_real, GDB_REGNO_TDATA1, tdata1) != ERROR_OK)
@@ -514,12 +518,17 @@ COMMAND_HANDLER(handle_etrace_disable_command)
 		target_real = target;
 
 	riscv_reg_t dpc_rb;
+	riscv_reg_t tselect;
 	riscv_reg_t tdata1 = field_value(CSR_MCONTROL_TYPE(riscv_xlen(target_real)), CSR_TDATA1_TYPE_MCONTROL) |
 							field_value(CSR_MCONTROL_ACTION, CSR_MCONTROL_ACTION_TRACE_OFF) |
 							field_value(CSR_MCONTROL_M, 1) |
 							field_value(CSR_MCONTROL_S, 1) |
 							field_value(CSR_MCONTROL_U, 1) |
 							field_value(CSR_MCONTROL_EXECUTE, 1);
+	RISCV_INFO(r);
+	if (target_real->etrace_trigger_index == 0xFFFFFFFF)
+		return ERROR_OK;
+	tselect = target_real->etrace_trigger_index;
 	if (riscv_reg_set(target_real, GDB_REGNO_TSELECT, tselect) != ERROR_OK)
 		return ERROR_FAIL;
 	if (riscv_reg_set(target_real, GDB_REGNO_TDATA1, tdata1) != ERROR_OK)
@@ -528,6 +537,9 @@ COMMAND_HANDLER(handle_etrace_disable_command)
 		return ERROR_FAIL;
 	if (riscv_reg_set(target_real, GDB_REGNO_TDATA2, dpc_rb) != ERROR_OK)
 		return ERROR_FAIL;
+
+	r->reserved_triggers[target_real->etrace_trigger_index] = false;
+	target_real->etrace_trigger_index = 0xFFFFFFFF;
 
 	return ERROR_OK;
 }

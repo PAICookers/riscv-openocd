@@ -215,6 +215,7 @@ struct target {
 	/* The semihosting information, extracted from the target. */
 	struct semihosting *semihosting;
 	bool resethalt_during_init;
+	unsigned int etrace_trigger_index;
 };
 
 struct target_list {
