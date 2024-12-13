@@ -387,13 +387,20 @@ static target_addr_t atb2axi_config_addr = 0xa5a5a5a5;
 static target_addr_t buffer_addr = 0xa5a5a5a5;
 static uint32_t buffer_size;
 
+#define CHECK_ETRACE_CONFIGURED()	{ \
+		if (atb2axi_config_addr == 0xa5a5a5a5) { \
+			LOG_ERROR("ETrace is not configured, please configure it first!"); \
+			LOG_INFO("eg. nuclei etrace config <atb2axi-addr> <buffer-addr> <buffer-size> <wrap>"); \
+			return ERROR_OK; \
+		} \
+	}
+
 static int etrace_read_reg(struct target *target, uint32_t offset, uint32_t *value)
 {
-	if (atb2axi_config_addr == 0xa5a5a5a5)
-		return ERROR_OK;
+	CHECK_ETRACE_CONFIGURED();
 	int result = target_read_u32(target, atb2axi_config_addr + offset, value);
 	if (result != ERROR_OK) {
-		LOG_ERROR("%s error at %#x", __func__, atb2axi_config_addr + offset);
+		LOG_ERROR("Failed to read etrace atb2axi register at %#x", atb2axi_config_addr + offset);
 		return result;
 	}
 	return ERROR_OK;
@@ -401,11 +408,10 @@ static int etrace_read_reg(struct target *target, uint32_t offset, uint32_t *val
 
 static int etrace_write_reg(struct target *target, uint32_t offset, uint32_t value)
 {
-	if (atb2axi_config_addr == 0xa5a5a5a5)
-		return ERROR_OK;
+	CHECK_ETRACE_CONFIGURED();
 	int result = target_write_u32(target, atb2axi_config_addr + offset, value);
 	if (result != ERROR_OK) {
-		LOG_ERROR("%s error writing %#x to %#x", __func__, value, atb2axi_config_addr + offset);
+		LOG_ERROR("Failed to write etrace atb2axi register %#x with %#x", value, atb2axi_config_addr + offset);
 		return result;
 	}
 	return ERROR_OK;
@@ -416,6 +422,7 @@ void etrace_stop(struct target *target)
 	uint32_t tmp;
 	uint32_t wait_idle = 0x100;
 
+	CHECK_ETRACE_CONFIGURED();
 	etrace_write_reg(target, ETRACE_ENA, 0);
 	do {
 		etrace_read_reg(target, ETRACE_IDLE, &tmp);
@@ -434,12 +441,12 @@ COMMAND_HANDLER(handle_etrace_config_command)
 
 	struct target *target = get_current_target(CMD_CTX);
 
-	uint32_t tmp;
-
-	etrace_read_reg(target, ETRACE_ENA, &tmp);
+	uint32_t tmp = 0;
+	if (atb2axi_config_addr != 0xa5a5a5a5)
+		etrace_read_reg(target, ETRACE_ENA, &tmp);
 	if (tmp) {
-		LOG_ERROR("etrace already start, please stop it first and then config.");
-		return 0;
+		LOG_ERROR("ETrace is still running, please run nuclei etrace stop to stop it first!");
+		return ERROR_OK;
 	}
 
 	COMMAND_PARSE_NUMBER(target_addr, CMD_ARGV[0], atb2axi_config_addr);
@@ -447,7 +454,11 @@ COMMAND_HANDLER(handle_etrace_config_command)
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], buffer_size);
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[3], wrap);
 
-	etrace_write_reg(target, ETRACE_ENDOFFSET, 0);
+	if (etrace_write_reg(target, ETRACE_ENDOFFSET, 0) != ERROR_OK) {
+		/* Only check first register write, if ok, assume configured correct */
+		LOG_ERROR("Unable to write etrace atb2axi register, please check!");
+		return ERROR_FAIL;
+	}
 	etrace_write_reg(target, ETRACE_FLG, 0);
 	etrace_write_reg(target, ETRACE_BASE_HI, (uint32_t)(buffer_addr >> 32));
 	etrace_write_reg(target, ETRACE_BASE_LO, (uint32_t)buffer_addr);
@@ -549,6 +560,7 @@ COMMAND_HANDLER(handle_etrace_start_command)
 	if (CMD_ARGC > 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
+	CHECK_ETRACE_CONFIGURED();
 	struct target *target = get_current_target(CMD_CTX);
 
 	etrace_write_reg(target, ETRACE_ENA, 1);
@@ -561,6 +573,7 @@ COMMAND_HANDLER(handle_etrace_stop_command)
 	if (CMD_ARGC > 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
+	CHECK_ETRACE_CONFIGURED();
 	struct target *target = get_current_target(CMD_CTX);
 
 	etrace_stop(target);
@@ -574,22 +587,23 @@ COMMAND_HANDLER(handle_etrace_dump_command)
 	uint32_t full_flag;
 	target_addr_t address;
 	uint32_t size;
-	uint8_t *temp;
-	struct fileio *fileio;
-	int retval, retvaltemp;
+	uint8_t *temp = NULL;
+	struct fileio *fileio = NULL;
+	int retval = ERROR_OK;
 	struct duration bench;
 
 	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
+	CHECK_ETRACE_CONFIGURED();
 	struct target *target = get_current_target(CMD_CTX);
 
-	uint32_t tmp;
+	uint32_t tmp = 0;
 
 	etrace_read_reg(target, ETRACE_ENA, &tmp);
 	if (tmp) {
-		LOG_ERROR("etrace already start, please stop it first and then dump.");
-		return 0;
+		LOG_ERROR("ETrace is still running, please use nuclei etrace stop to stop it first!");
+		return ERROR_OK;
 	}
 
 	etrace_read_reg(target, ETRACE_ENDOFFSET, &end_offset);
@@ -608,7 +622,7 @@ COMMAND_HANDLER(handle_etrace_dump_command)
 		return ERROR_FAIL;
 
 	if (fileio_open(&fileio, CMD_ARGV[0], FILEIO_WRITE, FILEIO_BINARY) != ERROR_OK)
-		return ERROR_FAIL;
+		goto fail;
 
 	duration_start(&bench);
 
@@ -633,21 +647,22 @@ COMMAND_HANDLER(handle_etrace_dump_command)
 			address += this_run_size;
 	}
 
-	free(temp);
-
 	if (retval == ERROR_OK && (duration_measure(&bench) == ERROR_OK)) {
 		size_t filesize;
-		retval = fileio_size(fileio, &filesize);
-		if (retval != ERROR_OK)
-			return retval;
+		fileio_size(fileio, &filesize);
 		command_print(CMD,
 				"dumped %zu bytes in %fs (%0.3f KiB/s)", filesize,
 				duration_elapsed(&bench), duration_kbps(&bench, filesize));
 	}
 
-	retvaltemp = fileio_close(fileio);
-	if (retvaltemp != ERROR_OK)
-		return retvaltemp;
+	retval = ERROR_OK;
+fail:
+	retval = ERROR_FAIL;
+ok:
+	if (!fileio)
+		fileio_close(fileio);
+	if (!temp)
+		free(temp);
 
 	return retval;
 }
@@ -657,6 +672,7 @@ COMMAND_HANDLER(handle_etrace_clear_command)
 	if (CMD_ARGC > 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
+	CHECK_ETRACE_CONFIGURED();
 	struct target *target = get_current_target(CMD_CTX);
 
 	etrace_stop(target);
@@ -672,6 +688,7 @@ COMMAND_HANDLER(handle_etrace_info_command)
 	uint32_t end_offset;
 	uint32_t full_flag;
 
+	CHECK_ETRACE_CONFIGURED();
 	if (CMD_ARGC > 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
@@ -680,7 +697,7 @@ COMMAND_HANDLER(handle_etrace_info_command)
 	etrace_read_reg(target, ETRACE_ENDOFFSET, &end_offset);
 	etrace_read_reg(target, ETRACE_FLG, &full_flag);
 
-	command_print(CMD, "ATB2AXI Addr: %#x", atb2axi_config_addr);
+	command_print(CMD, "ATB2AXI Addr: %#lx", atb2axi_config_addr);
 	command_print(CMD, "Buffer  Addr: %#lx", buffer_addr);
 	command_print(CMD, "Buffer  Size: %#x", buffer_size);
 	command_print_sameline(CMD, "Buffer Status: ");
@@ -699,7 +716,7 @@ static const struct command_registration etrace_command_handlers[] = {
 		.handler = handle_etrace_config_command,
 		.mode = COMMAND_EXEC,
 		.help = "Configuration etrace.",
-		.usage = "atb2axi-config-addr buffer-addr buffer-size wrap",
+		.usage = "atb2axi--addr buffer-addr buffer-size wrap",
 	},
 	{
 		.name = "enable",
@@ -792,7 +809,7 @@ uint64_t nuclei_get_dmcustom(struct target *target, uint32_t type, uint32_t hart
 COMMAND_HANDLER(nuclei_set_expose_cpu_core)
 {
 	if (CMD_ARGC == 0) {
-		LOG_ERROR("Command expects parameters");
+		LOG_ERROR("This command expects at least 1 parameters");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
@@ -812,7 +829,7 @@ COMMAND_HANDLER(nuclei_set_expose_cpu_core)
 COMMAND_HANDLER(nuclei_set_examine_cpu_core)
 {
 	if (CMD_ARGC == 0) {
-		LOG_ERROR("Command expects parameters");
+		LOG_ERROR("This command expects at least 1 parameters");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
@@ -848,7 +865,7 @@ COMMAND_HANDLER(nuclei_set_examine_cpu_core)
 COMMAND_HANDLER(handle_halt_group_command)
 {
 	if (CMD_ARGC < 2) {
-		LOG_ERROR("Command expects parameters");
+		LOG_ERROR("This command expects at least 2 parameters");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
@@ -875,7 +892,7 @@ COMMAND_HANDLER(handle_halt_group_command)
 COMMAND_HANDLER(handle_resume_group_command)
 {
 	if (CMD_ARGC < 2) {
-		LOG_ERROR("Command expects parameters");
+		LOG_ERROR("This command expects at least 2 parameters");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
