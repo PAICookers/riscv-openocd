@@ -3250,11 +3250,40 @@ static int riscv_rw_memory(struct target *target, const riscv_mem_access_args_t 
 	}
 
 	int mmu_enabled;
-	int result = riscv_mmu(target, &mmu_enabled);
-	if (result != ERROR_OK)
-		return result;
+	int target_running;
+	int result;
+	if (target->state != TARGET_RUNNING && target->state != TARGET_DEBUG_RUNNING) {
+		result = riscv_mmu(target, &mmu_enabled);
+		if (result != ERROR_OK)
+			return result;
+		target_running = 0;
+	} else { /* assume always physical address access when running using sba */
+		mmu_enabled = 0;
+		target_running = 1;
+	}
 
 	RISCV_INFO(r);
+	struct target_type *tt = get_target_type(target);
+	if (!tt)
+		return ERROR_FAIL;
+
+	if (target_running) {
+		int retval;
+		riscv_mem_access_method_t oldmethod = r->mem_access_methods[0];
+		unsigned int oldcnt = r->num_enabled_mem_access_methods;
+
+		/* when target is running, access force to sysbus, then restore */
+		r->num_enabled_mem_access_methods = 1;
+		r->mem_access_methods[0] = RISCV_MEM_ACCESS_SYSBUS;
+		if (is_write)
+			retval = tt->write_memory(target, address, size, count, write_buffer);
+		else
+			retval = r->read_memory(target, address, size, count, read_buffer, size);
+		r->num_enabled_mem_access_methods = oldcnt;
+		r->mem_access_methods[0] = oldmethod;
+		return retval;
+	}
+
 	if (!mmu_enabled) {
 		if (is_write)
 			return r->write_memory(target, args);
