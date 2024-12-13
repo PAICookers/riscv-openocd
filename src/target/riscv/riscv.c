@@ -2813,7 +2813,8 @@ static int riscv_effective_privilege_mode(struct target *target, int *v_mode, in
 {
 	riscv_reg_t priv;
 	if (riscv_reg_get(target, &priv, GDB_REGNO_PRIV) != ERROR_OK) {
-		LOG_TARGET_ERROR(target, "Failed to read priv register.");
+		if (target->state != TARGET_RUNNING && target->state != TARGET_DEBUG_RUNNING)
+			LOG_TARGET_ERROR(target, "Failed to read priv register.");
 		return ERROR_FAIL;
 	}
 	*v_mode = get_field(priv, VIRT_PRIV_V);
@@ -2844,7 +2845,8 @@ static int riscv_mmu(struct target *target, int *enabled)
 	/* Don't use MMU in explicit or effective M (machine) mode */
 	riscv_reg_t priv;
 	if (riscv_reg_get(target, &priv, GDB_REGNO_PRIV) != ERROR_OK) {
-		LOG_TARGET_ERROR(target, "Failed to read priv register.");
+		if (target->state != TARGET_RUNNING && target->state != TARGET_DEBUG_RUNNING)
+			LOG_TARGET_ERROR(target, "Failed to read priv register.");
 		return ERROR_FAIL;
 	}
 
@@ -3146,7 +3148,8 @@ static int riscv_virt2phys(struct target *target, target_addr_t virtual, target_
 
 	riscv_reg_t priv;
 	if (riscv_reg_get(target, &priv, GDB_REGNO_PRIV) != ERROR_OK) {
-		LOG_TARGET_ERROR(target, "Failed to read priv register.");
+		if (target->state != TARGET_RUNNING && target->state != TARGET_DEBUG_RUNNING)
+			LOG_TARGET_ERROR(target, "Failed to read priv register.");
 		return ERROR_FAIL;
 	}
 
