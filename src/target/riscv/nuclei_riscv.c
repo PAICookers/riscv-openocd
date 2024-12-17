@@ -495,13 +495,15 @@ COMMAND_HANDLER(handle_etrace_enable_command)
 							field_value(CSR_MCONTROL_U, 1) |
 							field_value(CSR_MCONTROL_EXECUTE, 1);
 	RISCV_INFO(r);
+	if (riscv_enumerate_triggers(target_real) != ERROR_OK)
+		return ERROR_FAIL;
 	if (target_real->etrace_trigger_index == 0xFFFFFFFF) {
-		if (find_next_free_trigger(target_real, CSR_TDATA1_TYPE_MCONTROL, false,
-					&target_real->etrace_trigger_index) != ERROR_OK) {
-			LOG_ERROR("No available trigger could be reserved for etrace usage.\n");
-			return ERROR_FAIL;
+		for (unsigned int i = 0; i < r->trigger_count; i++) {
+			if (r->trigger_unique_id[i] != -1)
+				LOG_ERROR("Index=%d trigger in use could't be reserved for etrace usage.\n", i);
+			target_real->etrace_trigger_index = i;
+			r->reserved_triggers[target_real->etrace_trigger_index] = true;
 		}
-		r->reserved_triggers[target_real->etrace_trigger_index] = true;
 	}
 	tselect = target_real->etrace_trigger_index;
 	if (riscv_reg_set(target_real, GDB_REGNO_TSELECT, tselect) != ERROR_OK)
@@ -537,8 +539,10 @@ COMMAND_HANDLER(handle_etrace_disable_command)
 							field_value(CSR_MCONTROL_U, 1) |
 							field_value(CSR_MCONTROL_EXECUTE, 1);
 	RISCV_INFO(r);
+	if (riscv_enumerate_triggers(target_real) != ERROR_OK)
+		return ERROR_FAIL;
 	if (target_real->etrace_trigger_index == 0xFFFFFFFF)
-		return ERROR_OK;
+		return ERROR_FAIL;
 	tselect = target_real->etrace_trigger_index;
 	if (riscv_reg_set(target_real, GDB_REGNO_TSELECT, tselect) != ERROR_OK)
 		return ERROR_FAIL;
@@ -655,7 +659,7 @@ COMMAND_HANDLER(handle_etrace_dump_command)
 				duration_elapsed(&bench), duration_kbps(&bench, filesize));
 	}
 
-	retval = ERROR_OK;
+	goto ok;
 fail:
 	retval = ERROR_FAIL;
 ok:
