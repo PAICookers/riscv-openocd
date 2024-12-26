@@ -457,7 +457,7 @@ COMMAND_HANDLER(handle_etrace_config_command)
 	if (etrace_write_reg(target, ETRACE_ENDOFFSET, 0) != ERROR_OK) {
 		/* Only check first register write, if ok, assume configured correct */
 		LOG_ERROR("Unable to write etrace atb2axi register, please check!");
-		return ERROR_FAIL;
+		return ERROR_OK;
 	}
 	etrace_write_reg(target, ETRACE_FLG, 0);
 	etrace_write_reg(target, ETRACE_BASE_HI, (uint32_t)(buffer_addr >> 32));
@@ -495,26 +495,39 @@ COMMAND_HANDLER(handle_etrace_enable_command)
 							field_value(CSR_MCONTROL_U, 1) |
 							field_value(CSR_MCONTROL_EXECUTE, 1);
 	RISCV_INFO(r);
-	if (riscv_enumerate_triggers(target_real) != ERROR_OK)
-		return ERROR_FAIL;
+	if (riscv_enumerate_triggers(target_real) != ERROR_OK) {
+		LOG_ERROR("Unable to enumerate trigger for target %s.\n", target->current_target_name);
+		return ERROR_OK;
+	}
 	if (target_real->etrace_trigger_index == 0xFFFFFFFF) {
 		for (unsigned int i = 0; i < r->trigger_count; i++) {
-			if (r->trigger_unique_id[i] != -1)
-				LOG_ERROR("Index=%d trigger in use could't be reserved for etrace usage.\n", i);
+			if (r->trigger_unique_id[i] != -1) {
+				LOG_DEBUG("Trigger %d is in use, could't be reserved for etrace usage.\n", i);
+				continue;
+			}
 			target_real->etrace_trigger_index = i;
-			r->reserved_triggers[target_real->etrace_trigger_index] = true;
+			r->trigger_unique_id[i] = 0xFE;
+			r->reserved_triggers[i] = true;
+			break;
 		}
+	}
+	if (target_real->etrace_trigger_index == 0xFFFFFFFF) {
+		LOG_ERROR("No available trigger could be reserved for etrace usage.\n");
+		return ERROR_OK;
 	}
 	tselect = target_real->etrace_trigger_index;
 	if (riscv_reg_set(target_real, GDB_REGNO_TSELECT, tselect) != ERROR_OK)
-		return ERROR_FAIL;
+		goto error;
 	if (riscv_reg_set(target_real, GDB_REGNO_TDATA1, tdata1) != ERROR_OK)
-		return ERROR_FAIL;
+		goto error;
 	if (riscv_reg_get(target_real, &dpc_rb, GDB_REGNO_DPC) != ERROR_OK)
-		return ERROR_FAIL;
+		goto error;
 	if (riscv_reg_set(target_real, GDB_REGNO_TDATA2, dpc_rb) != ERROR_OK)
-		return ERROR_FAIL;
+		goto error;
 
+	return ERROR_OK;
+error:
+	LOG_ERROR("Unable to configure selected etrace trigger %u.\n", (uint32_t)tselect);
 	return ERROR_OK;
 }
 
@@ -539,23 +552,29 @@ COMMAND_HANDLER(handle_etrace_disable_command)
 							field_value(CSR_MCONTROL_U, 1) |
 							field_value(CSR_MCONTROL_EXECUTE, 1);
 	RISCV_INFO(r);
-	if (riscv_enumerate_triggers(target_real) != ERROR_OK)
-		return ERROR_FAIL;
 	if (target_real->etrace_trigger_index == 0xFFFFFFFF)
-		return ERROR_FAIL;
+		return ERROR_OK;
+	if (riscv_enumerate_triggers(target_real) != ERROR_OK) {
+		LOG_ERROR("Unable to enumerate trigger for target %s.\n", target->current_target_name);
+		return ERROR_OK;
+	}
 	tselect = target_real->etrace_trigger_index;
 	if (riscv_reg_set(target_real, GDB_REGNO_TSELECT, tselect) != ERROR_OK)
-		return ERROR_FAIL;
+		goto error;
 	if (riscv_reg_set(target_real, GDB_REGNO_TDATA1, tdata1) != ERROR_OK)
-		return ERROR_FAIL;
+		goto error;
 	if (riscv_reg_get(target_real, &dpc_rb, GDB_REGNO_DPC) != ERROR_OK)
-		return ERROR_FAIL;
+		goto error;
 	if (riscv_reg_set(target_real, GDB_REGNO_TDATA2, dpc_rb) != ERROR_OK)
-		return ERROR_FAIL;
+		goto error;
 
 	r->reserved_triggers[target_real->etrace_trigger_index] = false;
+	r->trigger_unique_id[target_real->etrace_trigger_index] = -1;
 	target_real->etrace_trigger_index = 0xFFFFFFFF;
 
+	return ERROR_OK;
+error:
+	LOG_ERROR("Unable to configure selected etrace trigger %u.\n", (uint32_t)tselect);
 	return ERROR_OK;
 }
 
@@ -623,7 +642,7 @@ COMMAND_HANDLER(handle_etrace_dump_command)
 	uint32_t temp_size = (size > 4096) ? 4096 : size;
 	temp = malloc(temp_size);
 	if (!temp)
-		return ERROR_FAIL;
+		goto fail;
 
 	if (fileio_open(&fileio, CMD_ARGV[0], FILEIO_WRITE, FILEIO_BINARY) != ERROR_OK)
 		goto fail;
@@ -657,11 +676,14 @@ COMMAND_HANDLER(handle_etrace_dump_command)
 		command_print(CMD,
 				"dumped %zu bytes in %fs (%0.3f KiB/s)", filesize,
 				duration_elapsed(&bench), duration_kbps(&bench, filesize));
+	} else {
+		goto fail;
 	}
 
 	goto ok;
 fail:
-	retval = ERROR_FAIL;
+	LOG_ERROR("Unexpected error happened during dumping etrace!");
+	retval = ERROR_OK;
 ok:
 	if (!fileio)
 		fileio_close(fileio);
