@@ -508,6 +508,7 @@ COMMAND_HANDLER(handle_etrace_enable_command)
 			target_real->etrace_trigger_index = i;
 			r->trigger_unique_id[i] = 0xFE;
 			r->reserved_triggers[i] = true;
+			LOG_DEBUG("Trigger %d is reserved for etrace usage.\n", i);
 			break;
 		}
 	}
@@ -568,6 +569,7 @@ COMMAND_HANDLER(handle_etrace_disable_command)
 	if (riscv_reg_set(target_real, GDB_REGNO_TDATA2, dpc_rb) != ERROR_OK)
 		goto error;
 
+	LOG_DEBUG("Etrace free up trigger %d.\n", target_real->etrace_trigger_index);
 	r->reserved_triggers[target_real->etrace_trigger_index] = false;
 	r->trigger_unique_id[target_real->etrace_trigger_index] = -1;
 	target_real->etrace_trigger_index = 0xFFFFFFFF;
@@ -639,6 +641,10 @@ COMMAND_HANDLER(handle_etrace_dump_command)
 		size = end_offset;
 	}
 
+	if (size == 0) {
+		command_print(CMD, "No etrace could be dumped!");
+		goto ok;
+	}
 	uint32_t temp_size = (size > 4096) ? 4096 : size;
 	temp = malloc(temp_size);
 	if (!temp)
@@ -674,7 +680,7 @@ COMMAND_HANDLER(handle_etrace_dump_command)
 		size_t filesize;
 		fileio_size(fileio, &filesize);
 		command_print(CMD,
-				"dumped %zu bytes in %fs (%0.3f KiB/s)", filesize,
+				"Dumped etrace %zu bytes in %fs (%0.3f KiB/s)", filesize,
 				duration_elapsed(&bench), duration_kbps(&bench, filesize));
 	} else {
 		goto fail;
