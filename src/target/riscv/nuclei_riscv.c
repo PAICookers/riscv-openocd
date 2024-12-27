@@ -691,9 +691,9 @@ fail:
 	LOG_ERROR("Unexpected error happened during dumping etrace!");
 	retval = ERROR_OK;
 ok:
-	if (!fileio)
+	if (fileio)
 		fileio_close(fileio);
-	if (!temp)
+	if (temp)
 		free(temp);
 
 	return retval;
