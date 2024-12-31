@@ -5938,6 +5938,7 @@ static int target_create(struct jim_getopt_info *goi)
 
 	cp = Jim_GetString(new_cmd, NULL);
 	target->cmd_name = strdup(cp);
+	target->current_target_name = target->cmd_name;
 	if (!target->cmd_name) {
 		LOG_ERROR("Out of memory");
 		rtos_destroy(target);
