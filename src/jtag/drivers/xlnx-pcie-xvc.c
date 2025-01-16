@@ -38,8 +38,16 @@
 #define XLNX_XVC_VSEC_ID	0x8
 #define XLNX_XVC_MAX_BITS	0x20
 
+#ifndef PCI_EXT_CAP_ID_VNDR
+#define PCI_EXT_CAP_ID_VNDR	0x0B	/* Vendor-Specific */
+/* Vendor-Specific (VSEC, PCI_EXT_CAP_ID_VNDR) */
+#define PCI_VNDR_HEADER		4	/* Vendor-Specific Header */
+#define  PCI_VNDR_HEADER_ID(x)	((x) & 0xffff)
+#define  PCI_VNDR_HEADER_REV(x)	(((x) >> 16) & 0xf)
+#define  PCI_VNDR_HEADER_LEN(x)	(((x) >> 20) & 0xfff)
 #define MASK_ACK(x) (((x) >> 9) & 0x7)
 #define MASK_PAR(x) ((int)((x) & 0x1))
+#endif
 
 struct xlnx_pcie_xvc {
 	int fd;
