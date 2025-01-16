@@ -35,6 +35,7 @@
 #include "batch.h"
 #include "debug_reg_printer.h"
 #include "field_helpers.h"
+#include "nuclei_riscv.h"
 
 static int riscv013_on_step_or_resume(struct target *target, bool step);
 static int riscv013_step_or_resume_current_hart(struct target *target,
@@ -2343,7 +2344,14 @@ int riscv013_get_register_buf(struct target *target, uint8_t *value,
 		result = riscv_program_exec(&program, target);
 		if (result != ERROR_OK)
 			LOG_TARGET_ERROR(target, "Failed to execute vse while read");
-		read_memory(target, algorithm_v->address, 1, riscv_vlenb(target), value, 1);
+		const riscv_mem_access_args_t args = {
+				.address = algorithm_v->address,
+				.read_buffer = value,
+				.size = 1,
+				.count = riscv_vlenb(target),
+				.increment = 1,
+			};
+		read_memory(target, args);
 
 		target_free_working_area(target, algorithm_v);
 	}
@@ -2400,9 +2408,15 @@ int riscv013_set_register_buf(struct target *target, enum gdb_regno regno,
 		if (result != ERROR_OK)
 			LOG_TARGET_ERROR(target, "Failed to alloc workarea while write");
 		register_write_direct(target, GDB_REGNO_S0, algorithm_v->address);
-		write_memory(target, algorithm_v->address, 1, riscv_vlenb(target), value);
+		const riscv_mem_access_args_t args = {
+				.address = algorithm_v->address,
+				.write_buffer = value,
+				.size = 1,
+				.count = riscv_vlenb(target),
+				.increment = 1,
+			};
+		write_memory(target, args);
 
-		struct riscv_program program;
 		riscv_program_init(&program, target);
 		if (debug_vsew == 32)
 			riscv_program_insert(&program, vle32_v(S0, vnum));

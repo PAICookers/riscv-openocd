@@ -8,6 +8,9 @@
 #ifndef TARGET__RISCV__NUCLEI_RISCV_H
 #define TARGET__RISCV__NUCLEI_RISCV_H
 
+#include <stdint.h>
+
 extern const struct command_registration nuclei_command_group_handlers[];
+extern uint64_t nuclei_get_dmcustom(struct target *target, uint32_t type, uint32_t hart_id, uint32_t index);
 
 #endif /* TARGET__RISCV__NUCLEI_RISCV_H */

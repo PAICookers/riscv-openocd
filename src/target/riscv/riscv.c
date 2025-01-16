@@ -3276,9 +3276,9 @@ static int riscv_rw_memory(struct target *target, const riscv_mem_access_args_t 
 		r->num_enabled_mem_access_methods = 1;
 		r->mem_access_methods[0] = RISCV_MEM_ACCESS_SYSBUS;
 		if (is_write)
-			retval = tt->write_memory(target, address, size, count, write_buffer);
+			retval = r->write_memory(target, args);
 		else
-			retval = r->read_memory(target, address, size, count, read_buffer, size);
+			retval = r->read_memory(target, args);
 		r->num_enabled_mem_access_methods = oldcnt;
 		r->mem_access_methods[0] = oldmethod;
 		return retval;
@@ -4338,7 +4338,7 @@ static int parse_reg_ranges_impl(struct list_head *ranges, char *args,
 	return ERROR_OK;
 }
 
-static int parse_reg_ranges(struct list_head *ranges, const char *tcl_arg,
+int parse_reg_ranges(struct list_head *ranges, const char *tcl_arg,
 		const char *reg_type, unsigned int max_val)
 {
 	char *args = strdup(tcl_arg);

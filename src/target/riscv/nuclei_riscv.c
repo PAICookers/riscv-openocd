@@ -850,7 +850,7 @@ COMMAND_HANDLER(nuclei_set_expose_cpu_core)
 	int ret = ERROR_OK;
 
 	for (unsigned int i = 0; i < CMD_ARGC; i++) {
-		ret = parse_ranges(&info->expose_nuclei_cpu_core, CMD_ARGV[i], "nuclei_cpu_core", 0xFF);
+		ret = parse_reg_ranges(&info->expose_nuclei_cpu_core, CMD_ARGV[i], "nuclei_cpu_core", 0xFF);
 		if (ret != ERROR_OK)
 			break;
 	}
