@@ -3303,7 +3303,8 @@ static int riscv_rw_memory(struct target *target, const riscv_mem_access_args_t 
 		result = target->type->virt2phys(target, current_address, &physical_addr);
 		if (result != ERROR_OK) {
 			LOG_TARGET_ERROR(target, "Address translation failed.");
-			return result;
+			physical_addr = current_address;
+			//return result;
 		}
 
 		/* TODO: For simplicity, this algorithm assumes the worst case - the smallest possible page size,
