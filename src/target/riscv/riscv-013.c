@@ -3008,12 +3008,21 @@ static int deassert_reset(struct target *target)
 	control = 0;
 	control = set_field(control, DM_DMCONTROL_DMACTIVE, 1);
 	control = set_field(control, DM_DMCONTROL_ACKHAVERESET, 1);
+	control = set_field(control, DM_DMCONTROL_HALTREQ, target->reset_halt ? 1 : 0);
 	control = set_dmcontrol_hartsel(control, info->index);
 	result = dm_write(target, DM_DMCONTROL, control);
 	if (result != ERROR_OK)
 		return result;
 
+	/* If reset halt is set, should wait until all harts are not running */
 	if (target->reset_halt) {
+		for (size_t i = 0; i < 256; ++i) {
+			if (dmstatus_read(target, &dmstatus, true) != ERROR_OK)
+				return ERROR_FAIL;
+			/* When no harts are running, there's no point in continuing this loop. */
+			if (!get_field(dmstatus, DM_DMSTATUS_ANYRUNNING))
+				break;
+		}
 		target->state = TARGET_HALTED;
 		target->debug_reason = DBG_REASON_DBGRQ;
 	} else {
