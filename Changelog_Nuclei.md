@@ -6,7 +6,7 @@ If the tool version and documentation version not match, please take care.
 
 **Below is the changelog for Nuclei OpenOCD.**
 
-## 2024.12
+## 2025.02
 
 * improvement of ci and doc
 * replace ``vslide1down_vx`` to read/write riscv vector register
@@ -34,6 +34,7 @@ If the tool version and documentation version not match, please take care.
     | mstack_ctrl | mstack_ctl |
 
 * changes are based on [riscv/riscv-openocd@f82c5a7](https://github.com/riscv-collab/riscv-openocd/commit/f82c5a7)
+
 
 ## 2024.06
 
