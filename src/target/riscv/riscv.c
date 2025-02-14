@@ -2987,11 +2987,8 @@ static int riscv_address_translate(struct target *target,
 		LOG_TARGET_DEBUG(target, "i=%d; PTE @0x%" TARGET_PRIxADDR " = 0x%" PRIx64, i,
 				pte_address, pte);
 
-		if (!(pte & PTE_V) || (!(pte & PTE_R) && (pte & PTE_W))) {
-			LOG_TARGET_ERROR(target, "invalid PTE @0x%" TARGET_PRIxADDR ": 0x%" PRIx64
-					"; mode=%s; i=%d", pte_address, pte, info->name, i);
+		if (!(pte & PTE_V) || (!(pte & PTE_R) && (pte & PTE_W)))
 			return ERROR_FAIL;
-		}
 
 		if ((pte & PTE_R) || (pte & PTE_W) || (pte & PTE_X)) /* Found leaf PTE. */
 			break;
@@ -3301,11 +3298,8 @@ static int riscv_rw_memory(struct target *target, const riscv_mem_access_args_t 
 	while (current_count < args.count) {
 		target_addr_t physical_addr;
 		result = target->type->virt2phys(target, current_address, &physical_addr);
-		if (result != ERROR_OK) {
-			LOG_TARGET_ERROR(target, "Address translation failed.");
+		if (result != ERROR_OK)
 			physical_addr = current_address;
-			//return result;
-		}
 
 		/* TODO: For simplicity, this algorithm assumes the worst case - the smallest possible page size,
 		 * which is  4 KiB. The algorithm can be improved to detect the real page size, and allow to use larger
