@@ -854,7 +854,6 @@ static void oscan1_mpsse_clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out,
 {
 	static const uint8_t zero;
 	static const uint8_t one = 1;
-	uint8_t old_tmsbit = 1;
 
 	struct signal *tmsc_en = find_signal_by_name("TMSC_EN");
 
@@ -873,9 +872,8 @@ static void oscan1_mpsse_clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out,
 		/* drive TMSC to desired TMS value */
 		bitnum = out_offset + i;
 		tmsbit = ((out[bitnum/8] >> (bitnum%8)) & 0x1);
-		if (tmsbit == 1 && old_tmsbit == 1 && nscan1_ignore_tlr_rst == 1)
+		if ((nscan1_ignore_tlr_rst == 1) && (i < 3))
 			continue;
-		old_tmsbit = tmsbit;
 
 		if (tdibit == tmsbit) {
 			/* Can squash into a single MPSSE command */
