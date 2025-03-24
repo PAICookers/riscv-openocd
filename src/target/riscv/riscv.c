@@ -310,6 +310,7 @@ static void riscv_sample_buf_maybe_add_timestamp(struct target *target, bool bef
 }
 
 static int riscv_resume_go_all_harts(struct target *target);
+static int riscv_dmi_write(struct target *target, uint32_t dmi_address, uint32_t value);
 
 void select_dmi_via_bscan(struct target *target)
 {
@@ -2560,7 +2561,7 @@ int riscv_halt(struct target *target)
 		foreach_smp_target(tlist, target->smp_targets) {
 			struct target *t = tlist->target;
 			if (halt_finish(t) != ERROR_OK)
-				return ERROR_FAIL;
+				result = ERROR_FAIL;
 		}
 
 	} else {
@@ -2569,7 +2570,11 @@ int riscv_halt(struct target *target)
 		if (halt_go(target) != ERROR_OK)
 			result = ERROR_FAIL;
 		if (halt_finish(target) != ERROR_OK)
-			return ERROR_FAIL;
+			result = ERROR_FAIL;
+	}
+
+	if (result != ERROR_OK) {
+		riscv_dmi_write(target, riscv_get_dmi_address(target, DM_DMCONTROL),0);
 	}
 
 	return result;
