@@ -1315,21 +1315,20 @@ COMMAND_HANDLER(handle_halt_group_command)
 	bool on_off;
 	COMMAND_PARSE_BOOL(CMD_ARGV[0], on_off, "on", "off");
 
-	struct target *target;
-	RISCV_INFO(r);
-	if (r->dmi_write) {
-		int retval = ERROR_OK;
-		for (int i = 1; i < CMD_ARGC; i++) {
-			target = get_target(CMD_ARGV[i]);
+	struct target *target = get_current_target(CMD_CTX);
+	int retval = ERROR_OK;
+	for (int i = 1; i < CMD_ARGC; i++) {
+		target = get_target(CMD_ARGV[i]);
+		RISCV_INFO(r);
+		if (r->dmi_write) {
 			if (on_off)
 				retval = r->dmi_write(target, DM_DMCS2, 0x7);
 			else
 				retval = r->dmi_write(target, DM_DMCS2, 0x0);
 		}
-		return retval;
 	}
 
-	return ERROR_OK;
+	return retval;
 }
 
 COMMAND_HANDLER(handle_resume_group_command)
@@ -1342,21 +1341,20 @@ COMMAND_HANDLER(handle_resume_group_command)
 	bool on_off;
 	COMMAND_PARSE_BOOL(CMD_ARGV[0], on_off, "on", "off");
 
-	struct target *target;
-	RISCV_INFO(r);
-	if (r->dmi_write) {
-		int retval = ERROR_OK;
-		for (int i = 1; i < CMD_ARGC; i++) {
-			target = get_target(CMD_ARGV[i]);
+	struct target *target = get_current_target(CMD_CTX);
+	int retval = ERROR_OK;
+	for (int i = 1; i < CMD_ARGC; i++) {
+		target = get_target(CMD_ARGV[i]);
+		RISCV_INFO(r);
+		if (r->dmi_write) {
 			if (on_off)
 				retval = r->dmi_write(target, DM_DMCS2, 0x887);
 			else
 				retval = r->dmi_write(target, DM_DMCS2, 0x0);
 		}
-		return retval;
 	}
 
-	return ERROR_OK;
+	return retval;
 }
 
 static const struct command_registration cti_command_handlers[] = {
