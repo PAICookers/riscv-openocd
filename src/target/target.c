@@ -1549,7 +1549,7 @@ static int target_init(struct command_context *cmd_ctx, bool resethalt)
 		if (retval != ERROR_OK)
 			return retval;
 		target->resethalt_during_init = resethalt;
-		target->etrace_trigger_index = 0xFFFFFFFF;
+		target->trace_trigger_index = 0xFFFFFFFF;
 	}
 
 	if (!all_targets)
