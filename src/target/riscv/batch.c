@@ -223,25 +223,6 @@ static void log_batch(const struct riscv_batch *batch, size_t start_idx,
 
 	/* Decode and log every executed scan */
 	for (size_t i = start_idx; i < batch->used_scans; ++i) {
-		static const char * const dmr_string[] = {
-			"nop", "nop", "nop", "nop",
-			"data0", "data1", "data2", "data3",
-			"data4", "data5", "data6", "data7",
-			"data8", "data9", "data10", "data11",
-			"dmcontrol", "dmstatus", "hartinfo", "haltsum1",
-			"hawindowsel", "hawindow", "abstractcs", "command",
-			"abstractauto", "confstrptr0", "confstrptr1", "confstrptr2",
-			"confstrptr3", "nextdm", "nop", "nop",
-			"progbuf0", "progbuf1", "progbuf2", "progbuf3",
-			"progbuf4", "progbuf5", "progbuf6", "progbuf7",
-			"progbuf8", "progbuf9", "progbuf10", "progbuf11",
-			"progbuf12", "progbuf13", "progbuf14", "progbuf15",
-			"authdata0", "authdata1", "nop", "nop",
-			"haltsum2", "haltsum3", "nop", "sbaddress3",
-			"sbcs", "sbaddress0", "sbaddress1", "sbaddress2",
-			"sbdata0", "sbdata1", "sbdata2", "sbdata3",
-			"haltsum0"
-		};
 		static const char * const op_string[] = {"nop", "read", "write", "reserved"};
 		const int delay = get_delay(batch, i, delays, resets_delays,
 				reset_delays_after);
@@ -265,16 +246,16 @@ static void log_batch(const struct riscv_batch *batch, size_t start_idx,
 			const uint32_t in_address = buf_get_u32(field->in_value,
 					DTM_DMI_ADDRESS_OFFSET, abits);
 
-			LOG_DEBUG("%db %s 0x%08" PRIx32 " @%s -> %s 0x%08" PRIx32 " @%s; %di",
-					field->num_bits, op_string[out_op], out_data, dmr_string[out_address],
-					status_string[in_op], in_data, dmr_string[in_address], delay);
+			LOG_DEBUG("%db %s 0x%08" PRIx32 " @%02" PRIx32 " -> %s 0x%08" PRIx32 " @%02" PRIx32 "; %di",
+					field->num_bits, op_string[out_op], out_data, out_address,
+					status_string[in_op], in_data, in_address, delay);
 
 			if (last_scan_was_read && in_op == DTM_DMI_OP_SUCCESS)
 				log_dmi_decoded(batch, /*write*/ false,
 						last_scan_address, in_data);
 		} else {
-			LOG_DEBUG("%db %s 0x%08" PRIx32 " @%s -> ?; %di",
-					field->num_bits, op_string[out_op], out_data, dmr_string[out_address],
+			LOG_DEBUG("%db %s 0x%08" PRIx32 " @%02" PRIx32 " -> ?; %di",
+					field->num_bits, op_string[out_op], out_data, out_address,
 					delay);
 		}
 
