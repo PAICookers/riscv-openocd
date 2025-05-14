@@ -66,7 +66,18 @@ static int custom_run_algorithm(struct flash_bank *bank)
 
 	FILE* fd = fopen((char*)bank_msg->loader_path, "rb");
 	if (NULL == fd) {
-		fd = fopen(find_file(strrchr((char*)bank_msg->loader_path, '/')), "rb");
+		LOG_INFO("Try to find custom flashloader %s in openocd configuration search dirs.", (char*)bank_msg->loader_path);
+		char* full_path = find_file((char*)bank_msg->loader_path);
+		if (full_path) {
+			fd = fopen(full_path, "rb");
+			LOG_INFO("Using custom flashloader %s found in openocd configuration search dirs.", full_path);
+			free(full_path);
+		} else {
+			LOG_ERROR("Unable to find flashloader %s in openocd configuration search dirs.", (char*)bank_msg->loader_path);
+			return ERROR_FAIL;
+		}
+	} else {
+		LOG_INFO("Using custom flashloader %s", bank_msg->loader_path);
 	}
 	if (fd) {
 		fseek(fd, 0, SEEK_END);
