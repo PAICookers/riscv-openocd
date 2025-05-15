@@ -3231,6 +3231,10 @@ static int modify_privilege(struct target *target, uint64_t *mstatus, uint64_t *
 	if (get_field(dcsr, CSR_DCSR_PRV) == PRV_M)
 		return ERROR_OK;
 
+	if (get_field(dcsr, CSR_DCSR_V))
+		/* mstatus.mpv <- dcsr.v */
+		*mstatus = set_field(*mstatus, MSTATUS_MPV, get_field(dcsr, CSR_DCSR_V));
+
 	/* mstatus.mpp <- dcsr.prv */
 	*mstatus = set_field(*mstatus, MSTATUS_MPP, get_field(dcsr, CSR_DCSR_PRV));
 
