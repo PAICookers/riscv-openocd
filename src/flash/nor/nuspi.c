@@ -396,9 +396,10 @@ static int nuspi_reset(struct flash_bank *bank)
 {
 	/* Clear Rx FIFO */
 	uint32_t value;
+	uint32_t max_fifo = 256;
 	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
 	if(nuspi_info->nuspi_flags & NUSPI_FLAGS_32B_DAT) {
-		while (1) {
+		while (--max_fifo) {
 			if (nuspi_read_reg(bank, &value, NUSPI_REG_STATUS) != ERROR_OK)
 				return ERROR_FAIL;
 			if (value & NUSPI_STAT_RXEMPTY)
@@ -407,7 +408,7 @@ static int nuspi_reset(struct flash_bank *bank)
 				return ERROR_FAIL;
 		}
 	} else {
-		while (1) {
+		while (--max_fifo) {
 			if (nuspi_read_reg(bank, &value, NUSPI_REG_RXDATA) != ERROR_OK)
 				return ERROR_FAIL;
 			if (value >> 31)
