@@ -173,7 +173,8 @@ COMMAND_HANDLER(handle_nuclei_cpuinfo)
 		if (csr_mcfg & BIT(23))
 			command_print_sameline(CMD, " VNICE");
 		show_safety_mechanism(EXTRACT_FIELD(csr_mcfg, 0x3 << 21));
-		show_vpu_degree(EXTRACT_FIELD(csr_mcfg, 0x3 << 17));
+		if (csr_misa & BIT(21))
+			show_vpu_degree(EXTRACT_FIELD(csr_mcfg, 0x3 << 17));
 		command_print(CMD, " ");
 	}
 
@@ -255,7 +256,7 @@ COMMAND_HANDLER(handle_nuclei_cpuinfo)
 				command_print(CMD, "                  SMP&CC      64KB        %#lx", iregion_base + 0x40000);
 			riscv_reg_t smp_cfg = 0;
 			target_read_memory(target, iregion_base + 0x40004, 4, 1, (uint8_t *)&smp_cfg);
-			if ((csr_mcfg & BIT(2)) && (EXTRACT_FIELD(smp_cfg, 0x1F << 1) >= 2))
+			if ((csr_mcfg & BIT(2)) && (EXTRACT_FIELD(smp_cfg, 0x3F << 1) >= 1))
 				command_print(CMD, "                  CIDU        64KB        %#lx", iregion_base + 0x50000);
 			if (csr_mcfg & BIT(3))
 				command_print(CMD, "                  PLIC        64MB        %#lx", iregion_base + 0x4000000);
@@ -263,7 +264,7 @@ COMMAND_HANDLER(handle_nuclei_cpuinfo)
 			if (csr_mcfg & BIT(11)) {
 				command_print_sameline(CMD, "         SMP_CFG:");
 				command_print_sameline(CMD, " CC_PRESENT=%ld", EXTRACT_FIELD(smp_cfg, 0x1));
-				command_print_sameline(CMD, " SMP_CORE_NUM=%ld", EXTRACT_FIELD(smp_cfg, 0x3F << 1));
+				command_print_sameline(CMD, " SMP_CORE_NUM=%ld", EXTRACT_FIELD(smp_cfg, 0x3F << 1) + 1);
 				command_print_sameline(CMD, " IOCP_NUM=%ld", EXTRACT_FIELD(smp_cfg, 0x3F << 7));
 				command_print(CMD, " PMON_NUM=%ld", EXTRACT_FIELD(smp_cfg, 0x3F << 13));
 			}
