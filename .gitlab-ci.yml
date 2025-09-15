@@ -103,8 +103,8 @@ build-openocd:
       echo "Clone existing openocd repo $PWD to ~/Work/openocd-build/openocd.git"
       git clone $PWD ~/Work/openocd-build/openocd.git
       pushd ~/Work/openocd-build/openocd.git
-      # change to use githubfast as github to avoid bad github network issue
-      sed -i 's/github.com/githubfast.com/g' .gitmodules
+      ## change to use githubfast as github to avoid bad github network issue
+      #sed -i 's/github.com/githubfast.com/g' .gitmodules
       # change git.savannah.nongnu.org/git/git2cl to use repo.or.cz/git2cl.git
       sed -i 's|git.savannah.nongnu.org/git/git2cl|repo.or.cz/git2cl|g' .gitmodules
       # change gitlab.zapb.de/libjaylink/libjaylink.git to https://repo.or.cz/libjaylink.git
