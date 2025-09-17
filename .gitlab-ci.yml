@@ -203,6 +203,7 @@ deploy-openocd:
   stage: deploy
   interruptible: true
   resource_group: deploy
+  allow_failure: true
   tags:
     - env::shell
     - user::xl_ci
@@ -259,6 +260,7 @@ link-openocd:
   stage: deploy
   interruptible: true
   resource_group: deploy
+  allow_failure: true
   tags:
     - env::shell
     - user::xl_ci
