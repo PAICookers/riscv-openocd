@@ -16,6 +16,8 @@ noinst_LTLIBRARIES += %D%/libriscv.la
        %D%/riscv-013.h \
        %D%/riscv-013_reg.h \
        %D%/nuclei_riscv.h \
+       %D%/cpuinfo.h \
+       %D%/cpuinfo_cfg.h \
        %D%/batch.c \
        %D%/program.c \
        %D%/riscv-011.c \
@@ -27,6 +29,7 @@ noinst_LTLIBRARIES += %D%/libriscv.la
        %D%/riscv_semihosting.c \
        %D%/debug_defines.c \
        %D%/nuclei_riscv.c \
+       %D%/cpuinfo.c \
        %D%/debug_reg_printer.c
 
 STARTUP_TCL_SRCS += %D%/startup.tcl

@@ -48,6 +48,7 @@
 #include "arm_cti.h"
 #include "smp.h"
 #include "semihosting_common.h"
+#include "target/riscv/nuclei_riscv.h"
 
 /* default halt wait timeout (ms) */
 #define DEFAULT_HALT_TIMEOUT 5000
@@ -688,6 +689,12 @@ int target_examine_one(struct target *target)
 	LOG_USER("[%s] Target successfully examined.", target_name(target));
 	target_set_examined(target);
 	target_call_event_callbacks(target, TARGET_EVENT_EXAMINE_END);
+
+	CPU_CSR_Group csrs;
+	char str_buffer[8192];
+	nuclei_get_cpuinfo(target, &csrs);
+	get_basic_cpuinfo(&csrs, str_buffer, 8192);
+	LOG_INFO("%s", str_buffer);
 
 	LOG_TARGET_INFO(target, "Examination succeed");
 	return ERROR_OK;
