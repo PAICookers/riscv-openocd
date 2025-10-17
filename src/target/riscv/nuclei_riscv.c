@@ -14,6 +14,7 @@
 #include "helper/fileio.h"
 #include "helper/time_support.h"
 #include "riscv.h"
+#include "riscv_reg.h"
 #include "rtos/rtos.h"
 #include "debug_defines.h"
 #include <helper/bits.h>
@@ -54,61 +55,143 @@ void set_print_interface(struct command_invocation *cmd)
 
 #include "cpuinfo.h"
 
-void nuclei_get_cpuinfo(struct target *target, CPU_CSR_Group *csrs)
+int nuclei_get_cpuinfo(struct target *target, NUCLEI_CPUINFO *cpu)
 {
-	memset(csrs, 0, sizeof(CPU_CSR_Group)); // clear the struct
+    riscv_reg_t regval;
+    CPU_INFO_Group *cpuinfo;
 
-	riscv_reg_get(target, &csrs->marchid.d, GDB_REGNO_CSR0 + CSR_MARCHID);
-	riscv_reg_get(target, &csrs->marchid.d, GDB_REGNO_CSR0 + CSR_MARCHID);
-	riscv_reg_get(target, &csrs->mhartid, GDB_REGNO_CSR0 + CSR_MHARTID);
-	riscv_reg_get(target, &csrs->mimpid.d, GDB_REGNO_CSR0 + CSR_MIMPID);
-	riscv_reg_get(target, &csrs->misa.d, GDB_REGNO_CSR0 + CSR_MISA);
-	if (riscv_reg_get(target, &csrs->mcfginfo.d, GDB_REGNO_CSR0 + CSR_MCFG_INFO) == ERROR_OK)
-		csrs->mcfg_exist = 1;
+    if (cpu == NULL || target == NULL) {
+        return -1;
+    }
+    memset(cpu, 0, sizeof(NUCLEI_CPUINFO)); // clear the struct
+    cpuinfo = &cpu->cpuinfo;
+	cpuinfo->iinfo = &cpu->iinfo;
+    cpuinfo->eclic = &cpu->eclic;
+	cpuinfo->xlen = riscv_xlen(target);
+
+	if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MARCHID) == ERROR_OK)
+        cpuinfo->marchid.d = (uint32_t)regval;
+	if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MHARTID) == ERROR_OK)
+        cpuinfo->mhartid = (uint32_t)regval;
+	if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MIMPID) == ERROR_OK)
+        cpuinfo->mimpid.d = (uint32_t)regval;
+	if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MISA) == ERROR_OK)
+        cpuinfo->misa.d = (uint32_t)regval;
+
+    if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MCFG_INFO) == ERROR_OK) {
+        cpuinfo->mcfginfo.d = (uint32_t)regval;
+		cpuinfo->mcfg_exist = 1;
+    }
+    // workaround for gd32vf103, it have mcfg_info csr but the bitfields are different from latest version
+    // just mark mcfg_exist = 0
+    if (cpuinfo->marchid.d == 0x80000022U && cpuinfo->mimpid.d == 0x100U) {
+		cpuinfo->mcfg_exist = 0;
+        cpuinfo->mcfginfo.d = 0;
+    }
 	/**
 	 * mtlbcfginfo has a `mapping` field at the highest bit.
 	 * For RV64, move the bit 63 to bit 31 to use the common
 	 * struct as RV32.
 	 */
 	if (riscv_xlen(target) == 32) {
-		if (csrs->mcfginfo.b.plic)
-			riscv_reg_get(target, &csrs->mtlbcfginfo.d, GDB_REGNO_CSR0 + CSR_MTLBCFG_INFO);
+		if (cpuinfo->mcfginfo.b.plic)
+            if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MTLBCFG_INFO) == ERROR_OK) {
+                cpuinfo->mtlbcfginfo.d = (uint32_t)regval;
+            }
 	} else {
-		if (csrs->mcfginfo.b.plic) {
-			uint64_t mtlbcfginfo;
-			riscv_reg_get(target, &mtlbcfginfo, GDB_REGNO_CSR0 + CSR_MTLBCFG_INFO);
-			csrs->mtlbcfginfo.d = (uint32_t)mtlbcfginfo | (uint32_t)((mtlbcfginfo >> 63) << 31);
+		if (cpuinfo->mcfginfo.b.plic) {
+            if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MTLBCFG_INFO) == ERROR_OK) {
+			    cpuinfo->mtlbcfginfo.d = (uint32_t)regval | (uint32_t)((regval >> 63) << 31);
+            }
 		}
 	}
 
-	if (csrs->mcfginfo.b.icache || csrs->mcfginfo.b.ilm)
-		riscv_reg_get(target, &csrs->micfginfo.d, GDB_REGNO_CSR0 + CSR_MICFG_INFO);
-	if (csrs->mcfginfo.b.dcache || csrs->mcfginfo.b.dlm)
-		riscv_reg_get(target, &csrs->mdcfginfo.d, GDB_REGNO_CSR0 + CSR_MDCFG_INFO);
-	if (csrs->mcfginfo.b.iregion) {
-		riscv_reg_get(target, &csrs->mirgbinfo.d, GDB_REGNO_CSR0 + CSR_MIRGB_INFO);
-		unsigned long iregion_base = csrs->mirgbinfo.d & (~0x3FF);
-		IINFO_Type iregion_info;
-		target_read_memory(target, iregion_base, 4, sizeof(IINFO_Type) / 4, (uint8_t *)&iregion_info);
-		csrs->iinfo = &iregion_info;
-	}
-	if (csrs->mcfginfo.b.ppi)
-		riscv_reg_get(target, &csrs->mppicfginfo.d, GDB_REGNO_CSR0 + CSR_MPPICFG_INFO);
-	if (csrs->mcfginfo.b.fio)
-		riscv_reg_get(target, &csrs->mfiocfginfo.d, GDB_REGNO_CSR0 + CSR_MFIOCFG_INFO);
+    if (cpuinfo->mcfginfo.b.icache || cpuinfo->mcfginfo.b.ilm) {
+        if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MICFG_INFO) == ERROR_OK) {
+            cpuinfo->micfginfo.d = (uint32_t)regval;
+        }
+    }
+    if (cpuinfo->mcfginfo.b.dcache || cpuinfo->mcfginfo.b.dlm) {
+        if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MDCFG_INFO) == ERROR_OK) {
+            cpuinfo->mdcfginfo.d = (uint32_t)regval;
+        }
+    }
+	if (cpuinfo->mcfginfo.b.iregion) {
+        if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MIRGB_INFO) == ERROR_OK) {
+            cpuinfo->mirgbinfo.d = (uint64_t)regval;
+        }
+		uint64_t iregion_base = cpuinfo->mirgbinfo.d & (~0x3FFULL);
+        memset(&cpu->iinfo, 0 ,sizeof(IINFO_Type));
+		target_read_memory(target, iregion_base, 4, sizeof(IINFO_Type) / 4, (uint8_t *)&cpu->iinfo);
+        cpuinfo->iregion_base = iregion_base;
+        if (cpuinfo->mcfginfo.b.smp) {
+			target_read_memory(target, (iregion_base + CPUINFO_IRG_SMP_OFS + 0x4), 4, 1, (uint8_t *)&cpuinfo->smpcfg.d);
+        }
+        if (cpuinfo->smpcfg.b.cc) {
+			target_read_memory(target, (iregion_base + CPUINFO_IRG_SMP_OFS + 0x8), 4, 1, (uint8_t *)&cpuinfo->cccfg.d);
+        }
+        if (cpuinfo->mcfginfo.b.eclic) {
+            memset(&cpu->eclic, 0, sizeof(ECLIC_Type));
+			target_read_memory(target, (iregion_base + CPUINFO_IRG_ECLIC_OFS), 4, sizeof(ECLIC_Type) / 4, (uint8_t *)&cpu->eclic);
+	    }
+    }
+    if (cpuinfo->mcfginfo.b.ppi) {
+        if ( riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MPPICFG_INFO) == ERROR_OK) {
+            cpuinfo->mppicfginfo.d = (uint64_t)regval;
+        }
+    }
+    if (cpuinfo->mcfginfo.b.fio) {
+        if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MFIOCFG_INFO) == ERROR_OK) {
+            cpuinfo->mfiocfginfo.d = (uint64_t)regval;
+        }
+    }
+    return 0;
+}
+
+#define EXTRACT_MFG(X)  (((X) & 0xffe) >> 1)
+void nuclei_display_cpuinfo(struct target *target, void *cmd)
+{
+    if (target == NULL)
+        return;
+    // Nuclei Manufacture ID is 0x536
+    if (EXTRACT_MFG(target->tap->idcode) != 0x536) {
+        if (cmd == NULL) { // Just basic info
+            return;
+        }
+    }
+	NUCLEI_CPUINFO xlcpu;
+    if (nuclei_get_cpuinfo(target, &xlcpu) != 0) {
+        LOG_ERROR("Unable to get any Nuclei CPU INFO!");
+        return;
+    }
+
+	char strbuf[8192];
+    if (cmd != NULL) {
+	    set_print_interface((struct command_invocation *)cmd);
+    }
+    if (get_basic_cpuinfo(&xlcpu.cpuinfo, strbuf, 8192) > 0) {
+        if (cmd == NULL) {
+	        LOG_TARGET_INFO(target, "%s", strbuf);
+        } else {
+            cif_printf("%s: %s", target->cmd_name, strbuf);
+        }
+    }
+    if (CMD != NULL) {
+	    show_cpuinfo(&xlcpu.cpuinfo);
+    }
 }
 
 COMMAND_HANDLER(handle_nuclei_cpuinfo)
 {
-	struct target *target = get_current_target(CMD_CTX);
-	CIF_XLEN_Type xlen = CIF_XLEN_32;
-	CPU_CSR_Group csrs;
+	struct target *target = NULL;
 
-	if (riscv_xlen(target) == 64)
-		xlen = CIF_XLEN_64;
-	nuclei_get_cpuinfo(target, &csrs);
-	set_print_interface(CMD);
-	show_cpuinfo(xlen, &csrs);
+    target = get_current_target(CMD_CTX);
+    if (CMD_CTX->current_target_override == NULL)
+		target = get_target(target->current_target_name);
+    if (target == NULL)
+        target = get_current_target(CMD_CTX);
+
+    nuclei_display_cpuinfo(target, (void *)CMD);
 
 	return ERROR_OK;
 }
@@ -141,7 +224,7 @@ uint64_t nuclei_get_dmcustom(struct target *target, uint32_t type, uint32_t hart
 		address = 0x72;
 		if (r->dmi_read(target, &value, address) != ERROR_OK)
 			return ERROR_FAIL;
-		out_data |= value << 32;
+		out_data |= (uint64_t)value << 32;
 	} else {
 		LOG_ERROR("dmi_read is not implemented for this target.");
 		return ERROR_FAIL;
@@ -364,7 +447,7 @@ static int etrace_read_reg(struct target *target, uint32_t offset, uint32_t *val
 	CHECK_ETRACE_CONFIGURED();
 	int result = target_read_u32(target, atb2axi_config_addr + offset, value);
 	if (result != ERROR_OK) {
-		LOG_ERROR("Failed to read etrace atb2axi register at %#x", atb2axi_config_addr + offset);
+		LOG_ERROR("Failed to read etrace atb2axi register at %#lx", (uint64_t)(atb2axi_config_addr + offset));
 		return result;
 	}
 	return ERROR_OK;
@@ -375,13 +458,13 @@ static int etrace_write_reg(struct target *target, uint32_t offset, uint32_t val
 	CHECK_ETRACE_CONFIGURED();
 	int result = target_write_u32(target, atb2axi_config_addr + offset, value);
 	if (result != ERROR_OK) {
-		LOG_ERROR("Failed to write etrace atb2axi register %#x with %#x", value, atb2axi_config_addr + offset);
+		LOG_ERROR("Failed to write etrace atb2axi register %#lx with %#x", (uint64_t)(atb2axi_config_addr + offset), value);
 		return result;
 	}
 	return ERROR_OK;
 }
 
-static void etrace_stop(struct target *target)
+static int etrace_stop(struct target *target)
 {
 	uint32_t tmp;
 	uint32_t wait_idle = 0x100;
@@ -394,6 +477,7 @@ static void etrace_stop(struct target *target)
 		if (wait_idle == 0)
 			break;
 	} while (tmp != 1);
+    return ERROR_OK;
 }
 
 COMMAND_HANDLER(handle_etrace_config_command)
@@ -702,7 +786,7 @@ static int btrace_read_reg(struct target *target, uint32_t offset, uint32_t *val
 	CHECK_BTRACE_CONFIGURED();
 	int result = target_read_u32(target, btrace_config_addr + offset, value);
 	if (result != ERROR_OK) {
-		LOG_ERROR("Failed to read btrace register at %#x", btrace_config_addr + offset);
+		LOG_ERROR("Failed to read btrace register at %#lx", (uint64_t)(btrace_config_addr + offset));
 		return result;
 	}
 	return ERROR_OK;
@@ -713,13 +797,13 @@ static int btrace_write_reg(struct target *target, uint32_t offset, uint32_t val
 	CHECK_BTRACE_CONFIGURED();
 	int result = target_write_u32(target, btrace_config_addr + offset, value);
 	if (result != ERROR_OK) {
-		LOG_ERROR("Failed to write btrace register %#x with %#x", value, btrace_config_addr + offset);
+		LOG_ERROR("Failed to write btrace register %#lx with %#x", (uint64_t)(btrace_config_addr + offset), value);
 		return result;
 	}
 	return ERROR_OK;
 }
 
-static void btrace_stop(struct target *target)
+static int btrace_stop(struct target *target)
 {
         uint32_t tmp;
         uint32_t wait_idle = 0x100;
@@ -729,12 +813,12 @@ static void btrace_stop(struct target *target)
 	uint32_t core_num;
 	btrace_read_reg(target, BTRACE_FUNNEL + BTRACE_FCSTM_CS, &core_num);
 	core_num = (core_num >> 1) & 0x1F;
-	for (int i = 0;i < core_num;i++) {
+	for (int i = 0; i < core_num;i++) {
 		do {
 			btrace_read_reg(target, BTRACE_CORE0_TECTRL + i * 0x1000, &tmp);
 			wait_idle -= 1;
 			if (wait_idle == 0) {
-				LOG_ERROR("Timeout to wait core%d encoder empty");
+				LOG_ERROR("Timeout to wait core%d encoder empty!", i);
 				break;
 			}
 		}while (!(tmp & 0x8));
@@ -761,6 +845,7 @@ static void btrace_stop(struct target *target)
                         break;
 		}
         } while (!(tmp & 0x4));
+        return ERROR_OK;
 }
 
 COMMAND_HANDLER(handle_btrace_config_command)
@@ -995,13 +1080,13 @@ COMMAND_HANDLER(handle_btrace_info_command)
 
 	command_print(CMD, "Btrace Addr: %#lx", btrace_config_addr);
 	command_print(CMD, "Buffer Addr: %#lx", btrace_buffer_addr);
-	command_print(CMD, "Buffer Size: %#x", btrace_buffer_size);
+	command_print(CMD, "Buffer Size: %#lx", btrace_buffer_size);
 	command_print_sameline(CMD, "Buffer Status: ");
 	if (wrap_flag)
 		command_print(CMD, "used 100%% from %#lx [wraped]", end_buffer_addr);
 	else
 		command_print(CMD, "used %d%% from %#lx to %#lx", \
-		(((end_buffer_addr - btrace_buffer_addr) * 100) / btrace_buffer_size), btrace_buffer_addr, end_buffer_addr);
+		(uint32_t)(((end_buffer_addr - btrace_buffer_addr) * 100) / btrace_buffer_size), btrace_buffer_addr, end_buffer_addr);
 
 	return ERROR_OK;
 }

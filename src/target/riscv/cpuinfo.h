@@ -7,6 +7,17 @@ extern "C" {
 
 #include <stdint.h>
 
+/* IREGION Offsets */
+#define CPUINFO_IRG_IINFO_OFS (0x0)
+#define CPUINFO_IRG_DEBUG_OFS (0x10000)
+#define CPUINFO_IRG_ECLIC_OFS (0x20000)
+#define CPUINFO_IRG_TIMER_OFS (0x30000)
+#define CPUINFO_IRG_SMP_OFS (0x40000)
+#define CPUINFO_IRG_IDU_OFS (0x50000)
+#define CPUINFO_IRG_PL2_OFS (0x60000)
+#define CPUINFO_IRG_DPREFETCH_OFS (0x70000)
+#define CPUINFO_IRG_PLIC_OFS (0x4000000)
+
 /* NOTE: The CSR register length various between 32-bit and 64-bit
  * but usually the effective data is in the lower 32 bits. So we
  * use 32-bit data type to represent most of these registers. */
@@ -142,7 +153,7 @@ typedef union {
 
 /**
  * \brief  Union type to access low 26 bits of MISA CSR register.
- * 
+ *
  */
 typedef union {
     struct {
@@ -218,7 +229,7 @@ typedef union {
 } U64_CSR_MFIOCFG_INFO_Type;
 
 /* IREGION INFO Memory-Mapped Register Type*/
-typedef struct __attribute__((packed)) {
+typedef struct {
     uint32_t mpasize;                            /*!< offset 0x0000 */
     uint32_t cmo_info;                           /*!< offset 0x0004 */
     uint32_t sec_base_addr_lo;                   /*!< offset 0x0008 */
@@ -261,7 +272,63 @@ typedef struct __attribute__((packed)) {
 } IINFO_Type;
 
 /**
- * \brief  CPU CSR bundles
+ * \brief  Union type to access SMP_CFG register.
+ */
+typedef union {
+    struct {
+        u32_csr_t cc:1;                          /*!< bit: 0 Cluster Cache present */
+        u32_csr_t smp_core_num:6;                /*!< bit: 1..6 smp core number */
+        u32_csr_t iocp_num:6;                    /*!< bit: 7..12 IO Coherency port number */
+        u32_csr_t pmon_num:6;                    /*!< bit: 13..18 performance monitor number */
+        u32_csr_t :13;                           /*!< bit: 19..31 Reserved 0 */
+    } b;                                         /*!< Structure used for bit access */
+    u32_csr_t d;                                 /*!< Type      used for register data access */
+} U32_SMP_CFG_Type;
+
+/**
+ * \brief  Union type to access CC_CFG register.
+ */
+typedef union {
+    struct {
+        u32_csr_t set:4;                         /*!< bit: 0..3 Cluster cache set number */
+        u32_csr_t way:4;                         /*!< bit: 4..7 Cluster cache way number */
+        u32_csr_t lsize:3;                       /*!< bit: 8..10 Cluster cache line size */
+        u32_csr_t ecc:1;                         /*!< bit: 11   Cluster cache ECC support */
+        u32_csr_t tcycle:3;                      /*!< bit: 12..14 Tag ram access cycle */
+        u32_csr_t dcycle:3;                      /*!< bit: 15..17 Data ram access cycle */
+        u32_csr_t :14;                           /*!< bit: 18..31 Reserved */
+    } b;                                         /*!< Structure used for bit access */
+    u32_csr_t d;                                 /*!< Type      used for register data access */
+} U32_CC_CFG_Type;
+
+/**
+ * \brief  Union type to access ECLIC_INFO register.
+ */
+typedef union {
+    struct {
+        u32_csr_t num_interrupt:13;              /*!< bit: 0..12 interrupt source number */
+        u32_csr_t version:8;                     /*!< bit: 13..20 version number */
+        u32_csr_t clicintctlbits:4;              /*!< bit: 21..24 clicintctl register bit-width */
+        u32_csr_t :7;                            /*!< bit: 25..31 Reserved 0 */
+    } b;                                         /*!< Structure used for bit access */
+    u32_csr_t d;                                 /*!< Type      used for register data access */
+} U32_ECLIC_INFO_Type;
+
+/**
+ * \brief Access to the structure of ECLIC Memory Map, which is compatible with TEE.
+ */
+typedef struct {
+    uint8_t cfg;                                 /*!< Offset: 0x000 (R/W)  CLIC configuration register */
+    uint8_t reserved0[3];
+    U32_ECLIC_INFO_Type info;                    /*!< Offset: 0x004 (R/ )  CLIC information register */
+    uint8_t reserved1;
+    uint8_t reserved2;
+    uint8_t reserved3;
+    uint8_t mth;                                 /*!< Offset: 0x00B(R/W)  CLIC machine mode interrupt-level threshold */
+} ECLIC_Type;
+
+/**
+ * \brief  CPU INFO Structure
  */
 typedef struct {
     U32_CSR_MARCHID_Type marchid;
@@ -274,75 +341,15 @@ typedef struct {
     U32_CSR_MDCFG_INFO_Type mdcfginfo;
     U32_CSR_MTLBCFG_INFO_Type mtlbcfginfo;
     U64_CSR_MIRGB_INFO_Type mirgbinfo;
+    uint64_t iregion_base;
     U64_CSR_MPPICFG_INFO_Type mppicfginfo;
     U64_CSR_MFIOCFG_INFO_Type mfiocfginfo;
+    U32_SMP_CFG_Type smpcfg;
+    U32_CC_CFG_Type cccfg;
+    uint32_t xlen;
     IINFO_Type *iinfo;                           /*!< IREGION INFO memory pointer */
-} CPU_CSR_Group;
-
-typedef enum {
-    CIF_XLEN_32 = 0, /* 0 */
-    CIF_XLEN_64,     /* 1 */
-    CIF_XLEN_128,    /* 2 */
-    MAX_CIF_XLEN     /* 3 */
-} CIF_XLEN_Type;
-
-/**
- * \brief  Union type to access SMP_CFG CSR register.
- */
-typedef union {
-    struct {
-        u32_csr_t cc:1;                          /*!< bit: 0 Cluster Cache present */
-        u32_csr_t smp_core_num:6;                /*!< bit: 1..6 smp core number */
-        u32_csr_t iocp_num:6;                    /*!< bit: 7..12 IO Coherency port number */
-        u32_csr_t pmon_num:6;                    /*!< bit: 13..18 performance monitor number */
-        u32_csr_t :13;                           /*!< bit: 19..31 Reserved 0 */
-    } b;                                         /*!< Structure used for bit access */
-    u32_csr_t d;                                 /*!< Type      used for csr data access */
-} U32_CSR_SMP_CFG_Type;
-
-/**
- * \brief  Union type to access SMP_CFG CSR register.
- */
-typedef union {
-    struct {
-        u32_csr_t set:4;                         /*!< bit: 0..3 Cluster cache set number */
-        u32_csr_t way:4;                         /*!< bit: 4..7 Cluster cache way number */
-        u32_csr_t lsize:3;                       /*!< bit: 8..10 Cluster cache line size */
-        u32_csr_t ecc:1;                         /*!< bit: 11   Cluster cache ECC support */
-        u32_csr_t tcycle:3;                      /*!< bit: 12..14 Tag ram access cycle */
-        u32_csr_t dcycle:3;                      /*!< bit: 15..17 Data ram access cycle */
-        u32_csr_t :14;                           /*!< bit: 18..31 Reserved */
-    } b;                                         /*!< Structure used for bit access */
-    u32_csr_t d;                                 /*!< Type      used for csr data access */
-} U32_CSR_CC_CFG_Type;
-
-/**
- * \brief  Union type to access SMP_CFG CSR register.
- */
-typedef union {
-    struct {
-        u32_csr_t num_interrupt:13;              /*!< bit: 0..12 interrupt source number */
-        u32_csr_t version:8;                     /*!< bit: 13..20 version number */
-        u32_csr_t clicintctlbits:4;              /*!< bit: 21..24 clicintctl register bit-width */
-        u32_csr_t :7;                            /*!< bit: 25..31 Reserved 0 */
-    } b;                                         /*!< Structure used for bit access */
-    u32_csr_t d;                                 /*!< Type      used for csr data access */
-} U32_CSR_ECLIC_INFO_Type;
-
-/**
- * \brief Access to the structure of ECLIC Memory Map, which is compatible with TEE.
- */
-typedef struct __attribute__((packed)) {
-    uint8_t cfg;                                 /*!< Offset: 0x000 (R/W)  CLIC configuration register */
-    uint8_t reserved0[3];
-    U32_CSR_ECLIC_INFO_Type info;                /*!< Offset: 0x004 (R/ )  CLIC information register */
-    uint8_t reserved1;
-    uint8_t reserved2;
-    uint8_t reserved3;
-    uint8_t mth;                                 /*!< Offset: 0x00B(R/W)  CLIC machine mode interrupt-level threshold */
-} ECLIC_Type;
-
-
+    ECLIC_Type *eclic;                           /*!< ECLIC memory pointer */
+} CPU_INFO_Group;
 /**
  * \brief  Union type to access MVLM_CFG_LO register.
  */
@@ -623,23 +630,31 @@ typedef union {
 typedef uint32_t IINFO_MCPPI_CFG_HI_Type;
 
 /**
- * \brief Show full CPU information about ISA, ILD/DLM, I/D cache, etc.
- * \param xlen: XLEN
- * \param csrs: pointer to CPU_CSR_Group
+ * \brief  Nuclei CPU INFO Structure For OpenOCD Usage
  */
-void show_cpuinfo(CIF_XLEN_Type xlen, const CPU_CSR_Group *csrs);
+typedef struct {
+    CPU_INFO_Group cpuinfo;
+    IINFO_Type iinfo;
+    ECLIC_Type eclic;
+} NUCLEI_CPUINFO;
+
+/**
+ * \brief Show full CPU information about ISA, ILD/DLM, I/D cache, etc.
+ * \param cpuinfo: pointer to CPU_INFO_Group
+ */
+void show_cpuinfo(const CPU_INFO_Group *cpuinfo);
 
 /**
  * \brief Get basic CPU information in a single line.
  *        This function is **not reentrant** because it uses
  *        a shared static buffer.
- * \param csrs: pointer to CPU_CSR_Group
+ * \param cpuinfo: pointer to CPU_INFO_Group
  * \param str: pointer to string buffer
  * \param len: length of string buffer
  * \return actual length of result string or '-1' for `str == NULL`,
  *         it is same as the return value of `snprintf`
  */
-int get_basic_cpuinfo(const CPU_CSR_Group *csrs, char *str, unsigned long len);
+int get_basic_cpuinfo(const CPU_INFO_Group *cpuinfo, char *str, unsigned long len);
 
 #ifdef __cplusplus
 }
