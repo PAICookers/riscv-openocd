@@ -385,7 +385,7 @@ libusb_abort:
 	FT_DEVICE_LIST_INFO_NODE *devInfo;
 	devInfo = (FT_DEVICE_LIST_INFO_NODE*)malloc(sizeof(FT_DEVICE_LIST_INFO_NODE) * ft_cnt);
 	DWORD ft_matched_device_id;
-	char *ft_matched_device_description = NULL;
+	char *ft_matched_device_description = "FTDI JTAG";
 	if (ft_cnt > 0) {
 		ft_status = FT_GetDeviceInfoList(devInfo, &ft_cnt);
 		if (ft_status == FT_OK) {
@@ -547,7 +547,7 @@ struct mpsse_ctx *mpsse_open(const uint16_t vids[], const uint16_t pids[], const
 
 	if (!open_matching_device(ctx, vids, pids, description, serial, location)) {
 		LOG_ERROR("unable to open ftdi device with description '%s', "
-				"serial '%s' at bus location '%s'",
+				"serial '%s' at bus location '%s', please check jtag cable connection and driver status!",
 				description ? description : "*",
 				serial ? serial : "*",
 				location ? location : "*");
@@ -1120,6 +1120,7 @@ int mpsse_flush(struct mpsse_ctx *ctx)
 			ft_status = FT_GetStatus(ctx->usb_ft_handle, &rx_queue_len, &tx_queue_len, &ft_event_status);
 			if (ft_status != FT_OK) {
 				LOG_ERROR("FT_GetStatus() returned %lu", ft_status);
+				break;
 			}
 			keep_alive();
 		} while (tx_queue_len);
@@ -1139,13 +1140,14 @@ int mpsse_flush(struct mpsse_ctx *ctx)
 			ft_status = FT_GetStatus(ctx->usb_ft_handle, &rx_queue_len, &tx_queue_len, &ft_event_status);
 			if (ft_status != FT_OK) {
 				LOG_ERROR("FT_GetStatus() returned %lu", ft_status);
+				break;
 			}
 			keep_alive();
 		} while (rx_queue_len);
 	}
 
 	if (ft_status != FT_OK) {
-		// LOG_ERROR("FTD2xx failed with %lu", ft_status);
+		LOG_ERROR("FTD2xx failed with %lu", ft_status);
 		retval = ERROR_FAIL;
 	} else if (write_bytes_done < ctx->write_count) {
 		LOG_ERROR("ftdi device did not accept all data: %d, tried %d",
