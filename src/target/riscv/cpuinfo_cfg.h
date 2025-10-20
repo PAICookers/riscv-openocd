@@ -7,6 +7,7 @@
 extern void cif_printf(const char *format, ...);
 #define CIF_PRINTF(fmt, ...) cif_printf(fmt, ##__VA_ARGS__)
 typedef uint64_t addr_t;
+#define CIF_PRIxADDR "llx"
 
 #endif
 
