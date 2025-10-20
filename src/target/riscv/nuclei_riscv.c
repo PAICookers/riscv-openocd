@@ -59,6 +59,7 @@ int nuclei_get_cpuinfo(struct target *target, NUCLEI_CPUINFO *cpu)
 {
     riscv_reg_t regval;
     CPU_INFO_Group *cpuinfo;
+    uint32_t retry, csr_ready;
 
     if (cpu == NULL || target == NULL) {
         return -1;
@@ -69,15 +70,34 @@ int nuclei_get_cpuinfo(struct target *target, NUCLEI_CPUINFO *cpu)
     cpuinfo->eclic = &cpu->eclic;
 	cpuinfo->xlen = riscv_xlen(target);
 
-	if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MARCHID) == ERROR_OK)
-        cpuinfo->marchid.d = (uint32_t)regval;
-	if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MHARTID) == ERROR_OK)
-        cpuinfo->mhartid = (uint32_t)regval;
-	if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MIMPID) == ERROR_OK)
-        cpuinfo->mimpid.d = (uint32_t)regval;
-	if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MISA) == ERROR_OK)
-        cpuinfo->misa.d = (uint32_t)regval;
-
+    // Sometimes read csr for following csrs are not stable, max retry five times
+    // to get it
+    csr_ready = 0;
+    for (retry = 0; retry < 5; retry ++) {
+        if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MARCHID) == ERROR_OK) {
+            cpuinfo->marchid.d = (uint32_t)regval;
+            csr_ready |= 0x1;
+        }
+        if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MHARTID) == ERROR_OK) {
+            cpuinfo->mhartid = (uint32_t)regval;
+            csr_ready |= 0x2;
+        }
+        if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MIMPID) == ERROR_OK) {
+            cpuinfo->mimpid.d = (uint32_t)regval;
+            csr_ready |= 0x4;
+        }
+        if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MISA) == ERROR_OK) {
+            cpuinfo->misa.d = (uint32_t)regval;
+            csr_ready |= 0x8;
+        }
+        if (csr_ready == 0xF) {
+            break;
+        }
+    }
+    // If theses CSRs cannot be ready, just mark cpuinfo read fail
+    if (csr_ready != 0xF) {
+        return -1;
+    }
     if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MCFG_INFO) == ERROR_OK) {
         cpuinfo->mcfginfo.d = (uint32_t)regval;
 		cpuinfo->mcfg_exist = 1;
@@ -120,7 +140,7 @@ int nuclei_get_cpuinfo(struct target *target, NUCLEI_CPUINFO *cpu)
         if (riscv_reg_get(target, &regval, GDB_REGNO_CSR0 + CSR_MIRGB_INFO) == ERROR_OK) {
             cpuinfo->mirgbinfo.d = (uint64_t)regval;
         }
-		uint64_t iregion_base = cpuinfo->mirgbinfo.d & (~0x3FFULL);
+		uint64_t iregion_base = (uint64_t)(cpuinfo->mirgbinfo.d) & (~0x3FFULL);
         memset(&cpu->iinfo, 0 ,sizeof(IINFO_Type));
 		target_read_memory(target, iregion_base, 4, sizeof(IINFO_Type) / 4, (uint8_t *)&cpu->iinfo);
         cpuinfo->iregion_base = iregion_base;
@@ -161,7 +181,9 @@ void nuclei_display_cpuinfo(struct target *target, void *cmd)
     }
 	NUCLEI_CPUINFO xlcpu;
     if (nuclei_get_cpuinfo(target, &xlcpu) != 0) {
-        LOG_ERROR("Unable to get any Nuclei CPU INFO!");
+        if (cmd != NULL) {
+            cif_printf("Unable to get any Nuclei CPU INFO, please retry it and make sure JTAG connection is stable!");
+        }
         return;
     }
 
