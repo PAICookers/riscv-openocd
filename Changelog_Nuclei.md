@@ -6,6 +6,21 @@ If the tool version and documentation version not match, please take care.
 
 **Below is the changelog for Nuclei OpenOCD.**
 
+## 2025.10
+
+This release is based on the same code base of **2025.02**, but do some new feature and bugfixes.
+
+* Update ``nuclei cpuinfo`` command implementation using nuclei sdk 0.9.0 cpuinfo same source code to provide same behavior
+* Correct custom flashloader binary file location search rules, where openocd executed, openocd ``scripts`` folder, and absolute path
+* Sync nuclei custom CSRs support
+* Optimize flash probe process, when no flash probed, it will exit with error instead of hang on it
+* Support debug for hypervisor mode
+* Fix debug ``Assertion failed!`` on HBird opensource cpu
+* Fix nuclei riscv cross trigger command implementation ``nuclei cti xxx``
+* Clear ``haltreq`` signal when openocd connect failed
+* Fix segmentation fault issue when debug level set to 3 or 4
+* When debug on FPGA CPU MHz is very slow such as **5MHz**, openocd may work not correctly, it will be fixed by make CPU run faster such as **10MHz**
+
 ## 2025.02
 
 * improvement of ci and doc
