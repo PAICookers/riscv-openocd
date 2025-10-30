@@ -715,6 +715,20 @@ static const struct command_registration etrace_command_handlers[] = {
 		.usage = "atb2axi-addr buffer-addr buffer-size wrap",
 	},
 	{
+		.name = "enable",
+		.handler = handle_trace_enable_command,
+		.mode = COMMAND_EXEC,
+		.help = "enable trace within a core",
+		.usage = "",
+	},
+	{
+		.name = "disable",
+		.handler = handle_trace_disable_command,
+		.mode = COMMAND_EXEC,
+		.help = "disable trace within a core",
+		.usage = "",
+	},
+	{
 		.name = "start",
 		.handler = handle_etrace_start_command,
 		.mode = COMMAND_EXEC,
@@ -1120,6 +1134,20 @@ static const struct command_registration btrace_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.help = "Configuration btrace.",
 		.usage = "btrace-addr buffer-addr buffer-size wrap(0|1) system-timestamp(0|1) system-timestamp-counter-div(1|4|16|64)",
+	},
+	{
+		.name = "enable",
+		.handler = handle_trace_enable_command,
+		.mode = COMMAND_EXEC,
+		.help = "enable trace within a core",
+		.usage = "",
+	},
+	{
+		.name = "disable",
+		.handler = handle_trace_disable_command,
+		.mode = COMMAND_EXEC,
+		.help = "disable trace within a core",
+		.usage = "",
 	},
 	{
 		.name = "start",
