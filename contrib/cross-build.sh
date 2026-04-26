@@ -175,10 +175,18 @@ if [ -d $LIBJAYLINK_SRC ] ; then
 fi
 # ftd2xx copy to sysroot
 if [ -d $FTD2XX_SRC ] ; then
-    FTD2XX_LIB_SRC=${FTD2XX_SRC}/amd64
-    if [[ "$HOST_TRIPLET" == *"w32"* ]] ; then
-        FTD2XX_LIB_SRC=${FTD2XX_SRC}/i386
-    fi
+    case "$HOST_TRIPLET" in
+        x86_64-*)
+            FTD2XX_LIB_SRC=${FTD2XX_SRC}/amd64
+            ;;
+        i?86-*)
+            FTD2XX_LIB_SRC=${FTD2XX_SRC}/i386
+            ;;
+        *)
+            echo "Unsupported FTD2XX host triplet: $HOST_TRIPLET" >&2
+            exit 1
+            ;;
+    esac
     cp -f ${FTD2XX_LIB_SRC}/* $SYSROOT/usr/lib/
 fi
 
